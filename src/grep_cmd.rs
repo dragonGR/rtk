@@ -65,7 +65,7 @@ pub fn run(
             &msg,
         );
         if exit_code != 0 {
-            std::process::exit(exit_code);
+            return Err(crate::utils::exit_code_error(exit_code, "command failed"));
         }
         return Ok(());
     }
@@ -133,7 +133,7 @@ pub fn run(
     );
 
     if exit_code != 0 {
-        std::process::exit(exit_code);
+        return Err(crate::utils::exit_code_error(exit_code, "command failed"));
     }
 
     Ok(())

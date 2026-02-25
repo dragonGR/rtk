@@ -990,7 +990,17 @@ fn run_fallback(parse_error: clap::Error) -> Result<()> {
     Ok(())
 }
 
-fn main() -> Result<()> {
+fn main() {
+    if let Err(err) = run() {
+        if let Some(code) = utils::extract_exit_code(&err) {
+            std::process::exit(code);
+        }
+        eprintln!("Error: {:#}", err);
+        std::process::exit(1);
+    }
+}
+
+fn run() -> Result<()> {
     // Fire-and-forget telemetry ping (1/day, non-blocking)
     telemetry::maybe_ping();
 
@@ -1620,7 +1630,7 @@ fn main() -> Result<()> {
                                     &format!("rtk npx {} (passthrough)", args_str),
                                 );
                                 if !status.success() {
-                                    std::process::exit(status.code().unwrap_or(1));
+                                    return Err(crate::utils::status_code_error(status, "command failed"));
                                 }
                             }
                         }
@@ -1632,7 +1642,7 @@ fn main() -> Result<()> {
                             .context("Failed to run npx prisma")?;
                         timer.track_passthrough("npx prisma", "rtk npx prisma (passthrough)");
                         if !status.success() {
-                            std::process::exit(status.code().unwrap_or(1));
+                            return Err(crate::utils::status_code_error(status, "command failed"));
                         }
                     }
                 }
@@ -1797,7 +1807,7 @@ fn main() -> Result<()> {
 
             // Exit with same code as child process
             if !status.success() {
-                std::process::exit(status.code().unwrap_or(1));
+                return Err(utils::status_code_error(status, "proxy command failed"));
             }
         }
 

@@ -85,7 +85,7 @@ pub fn run(args: &[String], verbose: u8) -> Result<()> {
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         eprint!("{}", stderr);
-        std::process::exit(output.status.code().unwrap_or(1));
+        return Err(crate::utils::status_code_error(output.status, "command failed"));
     }
 
     let raw = String::from_utf8_lossy(&output.stdout).to_string();

@@ -165,7 +165,7 @@ fn list_prs(args: &[String], _verbose: u8, ultra_compact: bool) -> Result<()> {
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
         timer.track("gh pr list", "rtk gh pr list", &stderr, &stderr);
         eprintln!("{}", stderr.trim());
-        std::process::exit(output.status.code().unwrap_or(1));
+        return Err(crate::utils::status_code_error(output.status, "command failed"));
     }
 
     let json: Value =
@@ -256,7 +256,7 @@ fn view_pr(args: &[String], _verbose: u8, ultra_compact: bool) -> Result<()> {
             &stderr,
         );
         eprintln!("{}", stderr.trim());
-        std::process::exit(output.status.code().unwrap_or(1));
+        return Err(crate::utils::status_code_error(output.status, "command failed"));
     }
 
     let json: Value =
@@ -419,7 +419,7 @@ fn pr_checks(args: &[String], _verbose: u8, _ultra_compact: bool) -> Result<()> 
             &stderr,
         );
         eprintln!("{}", stderr.trim());
-        std::process::exit(output.status.code().unwrap_or(1));
+        return Err(crate::utils::status_code_error(output.status, "command failed"));
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -499,7 +499,7 @@ fn pr_status(_verbose: u8, _ultra_compact: bool) -> Result<()> {
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
         timer.track("gh pr status", "rtk gh pr status", &stderr, &stderr);
         eprintln!("{}", stderr.trim());
-        std::process::exit(output.status.code().unwrap_or(1));
+        return Err(crate::utils::status_code_error(output.status, "command failed"));
     }
 
     let json: Value =
@@ -554,7 +554,7 @@ fn list_issues(args: &[String], _verbose: u8, ultra_compact: bool) -> Result<()>
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
         timer.track("gh issue list", "rtk gh issue list", &stderr, &stderr);
         eprintln!("{}", stderr.trim());
-        std::process::exit(output.status.code().unwrap_or(1));
+        return Err(crate::utils::status_code_error(output.status, "command failed"));
     }
 
     let json: Value =
@@ -634,7 +634,7 @@ fn view_issue(args: &[String], _verbose: u8) -> Result<()> {
             &stderr,
         );
         eprintln!("{}", stderr.trim());
-        std::process::exit(output.status.code().unwrap_or(1));
+        return Err(crate::utils::status_code_error(output.status, "command failed"));
     }
 
     let json: Value =
@@ -726,7 +726,7 @@ fn list_runs(args: &[String], _verbose: u8, ultra_compact: bool) -> Result<()> {
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
         timer.track("gh run list", "rtk gh run list", &stderr, &stderr);
         eprintln!("{}", stderr.trim());
-        std::process::exit(output.status.code().unwrap_or(1));
+        return Err(crate::utils::status_code_error(output.status, "command failed"));
     }
 
     let json: Value =
@@ -825,7 +825,7 @@ fn view_run(args: &[String], _verbose: u8) -> Result<()> {
             &stderr,
         );
         eprintln!("{}", stderr.trim());
-        std::process::exit(output.status.code().unwrap_or(1));
+        return Err(crate::utils::status_code_error(output.status, "command failed"));
     }
 
     // Parse output and show only failures
@@ -902,7 +902,7 @@ fn run_repo(args: &[String], _verbose: u8, _ultra_compact: bool) -> Result<()> {
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
         timer.track("gh repo view", "rtk gh repo view", &stderr, &stderr);
         eprintln!("{}", stderr.trim());
-        std::process::exit(output.status.code().unwrap_or(1));
+        return Err(crate::utils::status_code_error(output.status, "command failed"));
     }
 
     let json: Value =
@@ -966,7 +966,7 @@ fn pr_create(args: &[String], _verbose: u8) -> Result<()> {
     if !output.status.success() {
         timer.track("gh pr create", "rtk gh pr create", &stderr, &stderr);
         eprintln!("{}", stderr.trim());
-        std::process::exit(output.status.code().unwrap_or(1));
+        return Err(crate::utils::status_code_error(output.status, "command failed"));
     }
 
     // gh pr create outputs the URL on success
@@ -1004,7 +1004,7 @@ fn pr_merge(args: &[String], _verbose: u8) -> Result<()> {
     if !output.status.success() {
         timer.track("gh pr merge", "rtk gh pr merge", &stderr, &stderr);
         eprintln!("{}", stderr.trim());
-        std::process::exit(output.status.code().unwrap_or(1));
+        return Err(crate::utils::status_code_error(output.status, "command failed"));
     }
 
     // Extract PR number from args (first non-flag arg)
@@ -1050,7 +1050,7 @@ fn pr_diff(args: &[String], _verbose: u8) -> Result<()> {
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
         timer.track("gh pr diff", "rtk gh pr diff", &stderr, &stderr);
         eprintln!("{}", stderr.trim());
-        std::process::exit(output.status.code().unwrap_or(1));
+        return Err(crate::utils::status_code_error(output.status, "command failed"));
     }
 
     let filtered = if raw.trim().is_empty() {
@@ -1091,7 +1091,7 @@ fn pr_action(action: &str, args: &[String], _verbose: u8) -> Result<()> {
             &stderr,
         );
         eprintln!("{}", stderr.trim());
-        std::process::exit(output.status.code().unwrap_or(1));
+        return Err(crate::utils::status_code_error(output.status, "command failed"));
     }
 
     // Extract PR number from args
@@ -1136,7 +1136,7 @@ fn run_api(args: &[String], _verbose: u8) -> Result<()> {
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
         timer.track("gh api", "rtk gh api", &stderr, &stderr);
         eprintln!("{}", stderr.trim());
-        std::process::exit(output.status.code().unwrap_or(1));
+        return Err(crate::utils::status_code_error(output.status, "command failed"));
     }
 
     // Try to parse as JSON and filter
@@ -1190,7 +1190,7 @@ fn run_passthrough_with_extra(cmd: &str, base_args: &[&str], extra_args: &[Strin
     timer.track_passthrough(&full_cmd, &format!("rtk {} (passthrough)", full_cmd));
 
     if !status.success() {
-        std::process::exit(status.code().unwrap_or(1));
+        return Err(crate::utils::status_code_error(status, "command failed"));
     }
 
     Ok(())
@@ -1216,7 +1216,7 @@ fn run_passthrough(cmd: &str, subcommand: &str, args: &[String]) -> Result<()> {
     );
 
     if !status.success() {
-        std::process::exit(status.code().unwrap_or(1));
+        return Err(crate::utils::status_code_error(status, "command failed"));
     }
 
     Ok(())

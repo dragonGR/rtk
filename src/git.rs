@@ -83,7 +83,7 @@ fn run_diff(
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             eprintln!("{}", stderr);
-            std::process::exit(output.status.code().unwrap_or(1));
+            return Err(crate::utils::status_code_error(output.status, "command failed"));
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -177,7 +177,7 @@ fn run_show(
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             eprintln!("{}", stderr);
-            std::process::exit(output.status.code().unwrap_or(1));
+            return Err(crate::utils::status_code_error(output.status, "command failed"));
         }
         let stdout = String::from_utf8_lossy(&output.stdout);
         if wants_blob_show {
@@ -217,7 +217,7 @@ fn run_show(
     if !summary_output.status.success() {
         let stderr = String::from_utf8_lossy(&summary_output.stderr);
         eprintln!("{}", stderr);
-        std::process::exit(summary_output.status.code().unwrap_or(1));
+        return Err(crate::utils::status_code_error(summary_output.status, "git show failed"));
     }
     let summary = String::from_utf8_lossy(&summary_output.stdout);
     println!("{}", summary.trim());
@@ -394,7 +394,7 @@ fn run_log(
         let stderr = String::from_utf8_lossy(&output.stderr);
         eprintln!("{}", stderr);
         // Propagate git's exit code
-        std::process::exit(output.status.code().unwrap_or(1));
+        return Err(crate::utils::status_code_error(output.status, "command failed"));
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -697,7 +697,7 @@ fn run_add(args: &[String], verbose: u8, global_args: &[String]) -> Result<()> {
             eprintln!("{}", stdout);
         }
         // Propagate git's exit code
-        std::process::exit(output.status.code().unwrap_or(1));
+        return Err(crate::utils::status_code_error(output.status, "command failed"));
     }
 
     Ok(())
@@ -988,7 +988,7 @@ fn run_branch(args: &[String], verbose: u8, global_args: &[String]) -> Result<()
             if !stdout.trim().is_empty() {
                 eprintln!("{}", stdout);
             }
-            std::process::exit(output.status.code().unwrap_or(1));
+            return Err(crate::utils::status_code_error(output.status, "command failed"));
         }
         return Ok(());
     }
@@ -1380,7 +1380,7 @@ pub fn run_passthrough(args: &[OsString], global_args: &[String], verbose: u8) -
     );
 
     if !status.success() {
-        std::process::exit(status.code().unwrap_or(1));
+        return Err(crate::utils::status_code_error(status, "command failed"));
     }
     Ok(())
 }

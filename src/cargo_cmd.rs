@@ -72,7 +72,7 @@ where
     );
 
     if !output.status.success() {
-        std::process::exit(exit_code);
+        return Err(crate::utils::exit_code_error(exit_code, "command failed"));
     }
 
     Ok(())
@@ -941,7 +941,7 @@ pub fn run_passthrough(args: &[OsString], verbose: u8) -> Result<()> {
     );
 
     if !status.success() {
-        std::process::exit(status.code().unwrap_or(1));
+        return Err(crate::utils::status_code_error(status, "command failed"));
     }
     Ok(())
 }

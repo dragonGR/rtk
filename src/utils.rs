@@ -7,7 +7,35 @@
 
 use anyhow::{Context, Result};
 use regex::Regex;
-use std::process::Command;
+use std::process::{Command, ExitStatus};
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+#[error("{message}")]
+pub struct ExitCodeError {
+    pub code: i32,
+    message: String,
+}
+
+/// Build an error carrying an explicit process exit code.
+pub fn exit_code_error(code: i32, message: impl Into<String>) -> anyhow::Error {
+    ExitCodeError {
+        code,
+        message: message.into(),
+    }
+    .into()
+}
+
+/// Build an error from an ExitStatus carrying the corresponding exit code.
+pub fn status_code_error(status: ExitStatus, message: impl Into<String>) -> anyhow::Error {
+    let code = status.code().unwrap_or(1);
+    exit_code_error(code, message)
+}
+
+/// Extract an exit code from an anyhow error if it wraps ExitCodeError.
+pub fn extract_exit_code(err: &anyhow::Error) -> Option<i32> {
+    err.downcast_ref::<ExitCodeError>().map(|e| e.code)
+}
 
 /// Tronque une chaîne à `max_len` caractères avec "..." si nécessaire.
 ///

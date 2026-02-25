@@ -28,7 +28,7 @@ pub fn run(args: &[String], verbose: u8) -> Result<()> {
             stderr.trim().to_string()
         };
         eprintln!("FAILED: curl {}", msg);
-        std::process::exit(output.status.code().unwrap_or(1));
+        return Err(crate::utils::status_code_error(output.status, "command failed"));
     }
 
     let raw = stdout.to_string();

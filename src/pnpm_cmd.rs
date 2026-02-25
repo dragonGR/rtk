@@ -507,7 +507,7 @@ pub fn run_passthrough(args: &[OsString], verbose: u8) -> Result<()> {
     );
 
     if !status.success() {
-        std::process::exit(status.code().unwrap_or(1));
+        return Err(crate::utils::status_code_error(status, "command failed"));
     }
     Ok(())
 }

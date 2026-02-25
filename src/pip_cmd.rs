@@ -79,7 +79,7 @@ fn run_list(base_cmd: &str, args: &[String], verbose: u8) -> Result<(String, Str
     println!("{}", filtered);
 
     if !output.status.success() {
-        std::process::exit(output.status.code().unwrap_or(1));
+        return Err(crate::utils::status_code_error(output.status, "command failed"));
     }
 
     Ok((raw, filtered))
@@ -114,7 +114,7 @@ fn run_outdated(base_cmd: &str, args: &[String], verbose: u8) -> Result<(String,
     println!("{}", filtered);
 
     if !output.status.success() {
-        std::process::exit(output.status.code().unwrap_or(1));
+        return Err(crate::utils::status_code_error(output.status, "command failed"));
     }
 
     Ok((raw, filtered))
@@ -147,7 +147,7 @@ fn run_passthrough(base_cmd: &str, args: &[String], verbose: u8) -> Result<(Stri
     eprint!("{}", stderr);
 
     if !output.status.success() {
-        std::process::exit(output.status.code().unwrap_or(1));
+        return Err(crate::utils::status_code_error(output.status, "command failed"));
     }
 
     Ok((raw.clone(), raw))

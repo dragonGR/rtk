@@ -541,7 +541,7 @@ pub fn run_docker_passthrough(args: &[OsString], verbose: u8) -> Result<()> {
     );
 
     if !status.success() {
-        std::process::exit(status.code().unwrap_or(1));
+        return Err(crate::utils::status_code_error(status, "command failed"));
     }
     Ok(())
 }
@@ -559,7 +559,7 @@ pub fn run_compose_ps(verbose: u8) -> Result<()> {
     if !raw_output.status.success() {
         let stderr = String::from_utf8_lossy(&raw_output.stderr);
         eprintln!("{}", stderr);
-        std::process::exit(raw_output.status.code().unwrap_or(1));
+        return Err(crate::utils::status_code_error(raw_output.status, "docker compose command failed"));
     }
     let raw = String::from_utf8_lossy(&raw_output.stdout).to_string();
 
@@ -577,7 +577,7 @@ pub fn run_compose_ps(verbose: u8) -> Result<()> {
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         eprintln!("{}", stderr);
-        std::process::exit(output.status.code().unwrap_or(1));
+        return Err(crate::utils::status_code_error(output.status, "command failed"));
     }
     let structured = String::from_utf8_lossy(&output.stdout).to_string();
 
@@ -606,7 +606,7 @@ pub fn run_compose_logs(service: Option<&str>, verbose: u8) -> Result<()> {
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         eprintln!("{}", stderr);
-        std::process::exit(output.status.code().unwrap_or(1));
+        return Err(crate::utils::status_code_error(output.status, "command failed"));
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -644,7 +644,7 @@ pub fn run_compose_build(service: Option<&str>, verbose: u8) -> Result<()> {
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         eprintln!("{}", stderr);
-        std::process::exit(output.status.code().unwrap_or(1));
+        return Err(crate::utils::status_code_error(output.status, "command failed"));
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -687,7 +687,7 @@ pub fn run_compose_passthrough(args: &[OsString], verbose: u8) -> Result<()> {
     );
 
     if !status.success() {
-        std::process::exit(status.code().unwrap_or(1));
+        return Err(crate::utils::status_code_error(status, "command failed"));
     }
     Ok(())
 }
@@ -711,7 +711,7 @@ pub fn run_kubectl_passthrough(args: &[OsString], verbose: u8) -> Result<()> {
     );
 
     if !status.success() {
-        std::process::exit(status.code().unwrap_or(1));
+        return Err(crate::utils::status_code_error(status, "command failed"));
     }
     Ok(())
 }

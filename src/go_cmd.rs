@@ -90,7 +90,7 @@ pub fn run_test(args: &[String], verbose: u8) -> Result<()> {
 
     // Preserve exit code for CI/CD
     if !output.status.success() {
-        std::process::exit(exit_code);
+        return Err(crate::utils::exit_code_error(exit_code, "command failed"));
     }
 
     Ok(())
@@ -143,7 +143,7 @@ pub fn run_build(args: &[String], verbose: u8) -> Result<()> {
 
     // Preserve exit code for CI/CD
     if !output.status.success() {
-        std::process::exit(exit_code);
+        return Err(crate::utils::exit_code_error(exit_code, "command failed"));
     }
 
     Ok(())
@@ -196,7 +196,7 @@ pub fn run_vet(args: &[String], verbose: u8) -> Result<()> {
 
     // Preserve exit code for CI/CD
     if !output.status.success() {
-        std::process::exit(exit_code);
+        return Err(crate::utils::exit_code_error(exit_code, "command failed"));
     }
 
     Ok(())
@@ -241,7 +241,7 @@ pub fn run_other(args: &[OsString], verbose: u8) -> Result<()> {
 
     // Preserve exit code
     if !output.status.success() {
-        std::process::exit(output.status.code().unwrap_or(1));
+        return Err(crate::utils::status_code_error(output.status, "command failed"));
     }
 
     Ok(())

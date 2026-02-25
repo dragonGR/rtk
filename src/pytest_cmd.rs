@@ -77,7 +77,7 @@ pub fn run(args: &[String], verbose: u8) -> Result<()> {
 
     // Preserve exit code for CI/CD
     if !output.status.success() {
-        std::process::exit(exit_code);
+        return Err(crate::utils::exit_code_error(exit_code, "command failed"));
     }
 
     Ok(())

@@ -56,7 +56,7 @@ pub fn run(args: &[String], verbose: u8) -> Result<()> {
     );
 
     // Preserve tsc exit code for CI/CD compatibility
-    std::process::exit(exit_code);
+    return Err(crate::utils::exit_code_error(exit_code, "command failed"));
 }
 
 /// Filter TypeScript compiler output - group errors by file, show every error

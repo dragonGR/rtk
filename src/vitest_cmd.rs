@@ -269,8 +269,10 @@ fn run_vitest(args: &[String], verbose: u8) -> Result<()> {
 
     timer.track("vitest run", "rtk vitest run", &combined, &filtered);
 
-    // Propagate original exit code
-    std::process::exit(exit_code)
+    if exit_code != 0 {
+        return Err(crate::utils::exit_code_error(exit_code, "command failed"));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
