@@ -28,12 +28,20 @@ pub enum ParseResult<T> {
 }
 
 impl<T> ParseResult<T> {
-    /// Unwrap the parsed data, panicking on Passthrough
-    pub fn unwrap(self) -> T {
+    /// Return parsed data for Full/Degraded tiers.
+    /// Returns None for Passthrough tier.
+    pub fn into_data(self) -> Option<T> {
         match self {
-            ParseResult::Full(data) => data,
-            ParseResult::Degraded(data, _) => data,
-            ParseResult::Passthrough(_) => panic!("Called unwrap on Passthrough result"),
+            ParseResult::Full(data) | ParseResult::Degraded(data, _) => Some(data),
+            ParseResult::Passthrough(_) => None,
+        }
+    }
+
+    /// Convert parse result into Result without panicking.
+    pub fn into_result(self) -> std::result::Result<T, String> {
+        match self {
+            ParseResult::Full(data) | ParseResult::Degraded(data, _) => Ok(data),
+            ParseResult::Passthrough(raw) => Err(raw),
         }
     }
 
@@ -212,13 +220,13 @@ mod tests {
         let full: ParseResult<i32> = ParseResult::Full(42);
         let mapped = full.map(|x| x * 2);
         assert_eq!(mapped.tier(), 1);
-        assert_eq!(mapped.unwrap(), 84);
+        assert_eq!(mapped.into_data(), Some(84));
 
         let degraded: ParseResult<i32> = ParseResult::Degraded(42, vec!["warn".to_string()]);
         let mapped = degraded.map(|x| x * 2);
         assert_eq!(mapped.tier(), 2);
         assert_eq!(mapped.warnings().len(), 1);
-        assert_eq!(mapped.unwrap(), 84);
+        assert_eq!(mapped.into_data(), Some(84));
     }
 
     #[test]
