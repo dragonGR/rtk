@@ -295,7 +295,7 @@ mod tests {
         assert_eq!(result.tier(), 1);
         assert!(result.is_ok());
 
-        let data = result.unwrap();
+        let data = result.into_data().expect("expected parsed vitest data");
         assert_eq!(data.total, 13);
         assert_eq!(data.passed, 13);
         assert_eq!(data.failed, 0);
@@ -314,7 +314,7 @@ mod tests {
         assert_eq!(result.tier(), 2); // Degraded
         assert!(result.is_ok());
 
-        let data = result.unwrap();
+        let data = result.into_data().expect("expected parsed vitest data");
         assert_eq!(data.passed, 13);
         assert_eq!(data.failed, 0);
     }
@@ -347,7 +347,7 @@ Scope: all 6 workspace projects
         assert_eq!(result.tier(), 1, "Should succeed with Tier 1 (full parse)");
         assert!(result.is_ok());
 
-        let data = result.unwrap();
+        let data = result.into_data().expect("expected parsed vitest data");
         assert_eq!(data.total, 13);
         assert_eq!(data.passed, 13);
         assert_eq!(data.failed, 0);
@@ -364,7 +364,7 @@ Scope: all 6 workspace projects
         assert_eq!(result.tier(), 1, "Should succeed with Tier 1 (full parse)");
         assert!(result.is_ok());
 
-        let data = result.unwrap();
+        let data = result.into_data().expect("expected parsed vitest data");
         assert_eq!(data.total, 5);
         assert_eq!(data.passed, 4);
         assert_eq!(data.failed, 1);
@@ -380,7 +380,7 @@ Scope: all 6 workspace projects
         assert_eq!(result.tier(), 1, "Should succeed with Tier 1 (full parse)");
         assert!(result.is_ok());
 
-        let data = result.unwrap();
+        let data = result.into_data().expect("expected parsed vitest data");
         assert_eq!(data.total, 2);
         assert_eq!(data.passed, 2);
     }

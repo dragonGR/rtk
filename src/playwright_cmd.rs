@@ -379,7 +379,7 @@ mod tests {
         assert_eq!(result.tier(), 1);
         assert!(result.is_ok());
 
-        let data = result.unwrap();
+        let data = result.into_data().expect("expected parsed playwright data");
         assert_eq!(data.passed, 1);
         assert_eq!(data.failed, 0);
         assert_eq!(data.duration_ms, Some(7300));
@@ -405,7 +405,7 @@ mod tests {
         assert_eq!(result.tier(), 1);
         assert!(result.is_ok());
 
-        let data = result.unwrap();
+        let data = result.into_data().expect("expected parsed playwright data");
         assert_eq!(data.passed, 4);
         assert_eq!(data.duration_ms, Some(3519));
     }
@@ -450,7 +450,7 @@ mod tests {
         assert_eq!(result.tier(), 1);
         assert!(result.is_ok());
 
-        let data = result.unwrap();
+        let data = result.into_data().expect("expected parsed playwright data");
         assert_eq!(data.failed, 1);
         assert_eq!(data.failures.len(), 1);
         assert_eq!(data.failures[0].test_name, "should work");
@@ -464,7 +464,7 @@ mod tests {
         assert_eq!(result.tier(), 2); // Degraded
         assert!(result.is_ok());
 
-        let data = result.unwrap();
+        let data = result.into_data().expect("expected parsed playwright data");
         assert_eq!(data.passed, 3);
         assert_eq!(data.failed, 0);
     }

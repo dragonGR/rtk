@@ -533,7 +533,7 @@ mod tests {
         assert_eq!(result.tier(), 1);
         assert!(result.is_ok());
 
-        let data = result.unwrap();
+        let data = result.into_data().expect("expected parsed pnpm data");
         assert!(data.total_packages >= 2);
     }
 
@@ -551,7 +551,7 @@ mod tests {
         assert_eq!(result.tier(), 1);
         assert!(result.is_ok());
 
-        let data = result.unwrap();
+        let data = result.into_data().expect("expected parsed pnpm data");
         assert_eq!(data.outdated_count, 1);
         assert_eq!(data.dependencies[0].name, "express");
     }
