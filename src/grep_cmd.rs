@@ -5,6 +5,8 @@ use std::collections::HashMap;
 use std::process::{Command, Output};
 use std::sync::OnceLock;
 
+const DEFAULT_EXCLUDE_DIRS: [&str; 5] = ["node_modules", "dist", "target", ".next", ".git"];
+
 pub fn run(
     pattern: &str,
     path: &str,
@@ -21,6 +23,16 @@ pub fn run(
         eprintln!("grep: '{}' in {}", pattern, path);
     }
 
+    let (extra_args, disable_default_excludes) = parse_control_flags(extra_args);
+    let use_default_excludes = !disable_default_excludes
+        && !extra_args.iter().any(|a| {
+            a == "--hidden"
+                || a == "--no-ignore"
+                || a == "--no-ignore-vcs"
+                || a == "-uuu"
+                || a == "-uu"
+        });
+
     // Fix: convert BRE alternation \| → | for rg (which uses PCRE-style regex)
     let rg_pattern = pattern.replace(r"\|", "|");
 
@@ -31,7 +43,13 @@ pub fn run(
         rg_cmd.arg("--type").arg(ft);
     }
 
-    for arg in extra_args {
+    if use_default_excludes {
+        for dir in DEFAULT_EXCLUDE_DIRS {
+            rg_cmd.arg("--glob").arg(format!("!{}/**", dir));
+        }
+    }
+
+    for arg in &extra_args {
         // Fix: skip grep-ism -r flag (rg is recursive by default; rg -r means --replace)
         if arg == "-r" || arg == "--recursive" {
             continue;
@@ -47,19 +65,19 @@ pub fn run(
                 let rg_stderr = String::from_utf8_lossy(&out.stderr);
                 if should_fallback_to_grep(out.status.code().unwrap_or(1), &rg_stderr) {
                     used_engine = "grep";
-                    run_grep_fallback(pattern, path, extra_args)?
+                    run_grep_fallback(pattern, path, &extra_args, use_default_excludes)?
                 } else {
                     out
                 }
             }
             Err(_) => {
                 used_engine = "grep";
-                run_grep_fallback(pattern, path, extra_args)?
+                run_grep_fallback(pattern, path, &extra_args, use_default_excludes)?
             }
         }
     } else {
         used_engine = "grep";
-        run_grep_fallback(pattern, path, extra_args)?
+        run_grep_fallback(pattern, path, &extra_args, use_default_excludes)?
     };
 
     if verbose > 0 {
@@ -228,9 +246,19 @@ fn compact_path(path: &str) -> String {
     )
 }
 
-fn run_grep_fallback(pattern: &str, path: &str, extra_args: &[String]) -> Result<Output> {
+fn run_grep_fallback(
+    pattern: &str,
+    path: &str,
+    extra_args: &[String],
+    use_default_excludes: bool,
+) -> Result<Output> {
     let mut grep_cmd = Command::new("grep");
     grep_cmd.arg("-rn");
+    if use_default_excludes {
+        for dir in DEFAULT_EXCLUDE_DIRS {
+            grep_cmd.arg(format!("--exclude-dir={}", dir));
+        }
+    }
 
     for arg in extra_args {
         if arg == "-r" || arg == "--recursive" {
@@ -241,6 +269,19 @@ fn run_grep_fallback(pattern: &str, path: &str, extra_args: &[String]) -> Result
 
     grep_cmd.arg(pattern).arg(path);
     grep_cmd.output().context("grep fallback failed")
+}
+
+fn parse_control_flags(extra_args: &[String]) -> (Vec<String>, bool) {
+    let mut filtered = Vec::with_capacity(extra_args.len());
+    let mut disable_default_excludes = false;
+    for arg in extra_args {
+        if arg == "--no-default-excludes" {
+            disable_default_excludes = true;
+            continue;
+        }
+        filtered.push(arg.clone());
+    }
+    (filtered, disable_default_excludes)
 }
 
 fn rg_available_cached() -> bool {
@@ -363,5 +404,18 @@ mod tests {
     #[test]
     fn test_should_not_fallback_for_no_match_exit() {
         assert!(!should_fallback_to_grep(1, ""));
+    }
+
+    #[test]
+    fn test_parse_control_flags() {
+        let args = vec![
+            "--no-default-excludes".to_string(),
+            "-i".to_string(),
+            "-A".to_string(),
+            "2".to_string(),
+        ];
+        let (filtered, disabled) = parse_control_flags(&args);
+        assert!(disabled);
+        assert_eq!(filtered, vec!["-i", "-A", "2"]);
     }
 }
