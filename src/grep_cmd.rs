@@ -2,7 +2,7 @@ use crate::tracking;
 use anyhow::{Context, Result};
 use regex::Regex;
 use std::collections::HashMap;
-use std::process::Command;
+use std::process::{Command, Output};
 
 pub fn run(
     pattern: &str,
@@ -24,7 +24,7 @@ pub fn run(
     let rg_pattern = pattern.replace(r"\|", "|");
 
     let mut rg_cmd = Command::new("rg");
-    rg_cmd.args(["-n", "--no-heading", &rg_pattern, path]);
+    rg_cmd.args(["-n", "--no-heading"]);
 
     if let Some(ft) = file_type {
         rg_cmd.arg("--type").arg(ft);
@@ -37,11 +37,30 @@ pub fn run(
         }
         rg_cmd.arg(arg);
     }
+    rg_cmd.arg(&rg_pattern).arg(path);
 
-    let output = rg_cmd
-        .output()
-        .or_else(|_| Command::new("grep").args(["-rn", pattern, path]).output())
-        .context("grep/rg failed")?;
+    let rg_output = rg_cmd.output();
+    let mut used_engine = "rg";
+
+    let output = match rg_output {
+        Ok(out) => {
+            let rg_stderr = String::from_utf8_lossy(&out.stderr);
+            if should_fallback_to_grep(out.status.code().unwrap_or(1), &rg_stderr) {
+                used_engine = "grep";
+                run_grep_fallback(pattern, path, extra_args)?
+            } else {
+                out
+            }
+        }
+        Err(_) => {
+            used_engine = "grep";
+            run_grep_fallback(pattern, path, extra_args)?
+        }
+    };
+
+    if verbose > 0 {
+        eprintln!("grep backend: {}", used_engine);
+    }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let exit_code = output.status.code().unwrap_or(1);
@@ -60,7 +79,7 @@ pub fn run(
         println!("{}", msg);
         timer.track(
             &format!("grep -rn '{}' {}", pattern, path),
-            "rtk grep",
+            &format!("rtk grep ({})", used_engine),
             &raw_output,
             &msg,
         );
@@ -127,7 +146,7 @@ pub fn run(
     print!("{}", rtk_output);
     timer.track(
         &format!("grep -rn '{}' {}", pattern, path),
-        "rtk grep",
+        &format!("rtk grep ({})", used_engine),
         &raw_output,
         &rtk_output,
     );
@@ -203,6 +222,34 @@ fn compact_path(path: &str) -> String {
         parts[parts.len() - 2],
         parts[parts.len() - 1]
     )
+}
+
+fn run_grep_fallback(pattern: &str, path: &str, extra_args: &[String]) -> Result<Output> {
+    let mut grep_cmd = Command::new("grep");
+    grep_cmd.arg("-rn");
+
+    for arg in extra_args {
+        if arg == "-r" || arg == "--recursive" {
+            continue;
+        }
+        grep_cmd.arg(arg);
+    }
+
+    grep_cmd.arg(pattern).arg(path);
+    grep_cmd.output().context("grep fallback failed")
+}
+
+fn should_fallback_to_grep(exit_code: i32, rg_stderr: &str) -> bool {
+    if exit_code != 2 {
+        return false;
+    }
+
+    let err = rg_stderr.to_lowercase();
+    err.contains("unrecognized flag")
+        || err.contains("unknown option")
+        || err.contains("unexpected argument")
+        || err.contains("regex parse error")
+        || err.contains("error parsing regex")
 }
 
 #[cfg(test)]
@@ -284,5 +331,20 @@ mod tests {
             );
         }
         // If rg is not installed, skip gracefully (test still passes)
+    }
+
+    #[test]
+    fn test_should_fallback_to_grep_on_unrecognized_flag() {
+        assert!(should_fallback_to_grep(2, "error: unrecognized flag '--perl-regexp'"));
+    }
+
+    #[test]
+    fn test_should_fallback_to_grep_on_regex_parse_error() {
+        assert!(should_fallback_to_grep(2, "regex parse error: unclosed group"));
+    }
+
+    #[test]
+    fn test_should_not_fallback_for_no_match_exit() {
+        assert!(!should_fallback_to_grep(1, ""));
     }
 }
