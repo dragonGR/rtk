@@ -131,8 +131,11 @@ fn write_tee_file(
 
     std::fs::write(&filepath, content).ok()?;
 
-    // Rotate old files
-    cleanup_old_files(tee_dir, max_files);
+    // Rotate old files asynchronously to keep command return path fast.
+    let rotate_dir = tee_dir.to_path_buf();
+    std::thread::spawn(move || {
+        cleanup_old_files(&rotate_dir, max_files);
+    });
 
     Some(filepath)
 }
