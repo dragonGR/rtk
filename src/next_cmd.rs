@@ -92,7 +92,7 @@ fn filter_next_build(output: &str) -> String {
         } else {
             Cow::Borrowed(raw_line)
         };
-        let line = clean_line.as_str();
+        let line: &str = clean_line.as_ref();
 
         if line.contains("already optimized") {
             saw_already_optimized = true;
