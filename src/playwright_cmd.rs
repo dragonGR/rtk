@@ -1,5 +1,5 @@
 use crate::tracking;
-use crate::utils::{detect_package_manager, run_command_streaming, strip_ansi};
+use crate::utils::{concat_streams, detect_package_manager, run_command_streaming, strip_ansi};
 use anyhow::{Context, Result};
 use regex::Regex;
 use serde::Deserialize;
@@ -288,7 +288,7 @@ pub fn run(args: &[String], verbose: u8) -> Result<()> {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
-    let raw = format!("{}\n{}", stdout, stderr);
+    let raw = concat_streams(&stdout, &stderr, true);
 
     // Parse output using PlaywrightParser
     let parse_result = PlaywrightParser::parse(&stdout);

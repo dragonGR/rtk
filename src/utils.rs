@@ -34,6 +34,19 @@ pub fn status_code_error(status: ExitStatus, message: impl Into<String>) -> anyh
     exit_code_error(code, message)
 }
 
+/// Concatenate stdout and stderr with an optional newline separator when both are non-empty.
+pub fn concat_streams(stdout: &str, stderr: &str, newline_between: bool) -> String {
+    let mut out = String::with_capacity(stdout.len() + stderr.len() + 1);
+    out.push_str(stdout);
+    if !stderr.is_empty() {
+        if newline_between && !stdout.is_empty() {
+            out.push('\n');
+        }
+        out.push_str(stderr);
+    }
+    out
+}
+
 /// Captured output for streaming command execution.
 pub struct StreamedOutput {
     pub status: ExitStatus,

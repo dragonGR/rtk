@@ -1,7 +1,7 @@
 use crate::prettier_cmd;
 use crate::ruff_cmd;
 use crate::tracking;
-use crate::utils::package_manager_exec;
+use crate::utils::{concat_streams, package_manager_exec};
 use anyhow::{Context, Result};
 use std::path::Path;
 use std::process::Command;
@@ -117,7 +117,7 @@ pub fn run(args: &[String], verbose: u8) -> Result<()> {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
-    let raw = format!("{}\n{}", stdout, stderr);
+    let raw = concat_streams(&stdout, &stderr, true);
 
     // Dispatch to appropriate filter based on formatter
     let filtered = match formatter.as_str() {
