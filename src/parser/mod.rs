@@ -6,9 +6,12 @@
 //! - Tier 3 (Passthrough): Raw output truncation with error marker
 //!
 //! The three-tier system ensures RTK never returns false data silently.
+#![allow(dead_code)]
 
+#[allow(dead_code)]
 pub mod error;
 pub mod formatter;
+#[allow(dead_code)]
 pub mod types;
 
 pub use formatter::{FormatMode, TokenFormatter};
