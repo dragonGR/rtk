@@ -7,8 +7,11 @@
 
 use anyhow::{Context, Result};
 use regex::Regex;
+use std::collections::HashMap;
 use std::io::Read;
+use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
+use std::sync::{Mutex, OnceLock};
 use std::thread;
 use thiserror::Error;
 
@@ -378,14 +381,87 @@ pub fn detect_package_manager() -> &'static str {
     }
 }
 
+fn is_executable_path(path: &Path) -> bool {
+    if !path.is_file() {
+        return false;
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        return std::fs::metadata(path)
+            .map(|m| m.permissions().mode() & 0o111 != 0)
+            .unwrap_or(false);
+    }
+
+    #[cfg(not(unix))]
+    {
+        true
+    }
+}
+
+fn command_exists_in_path(tool: &str) -> bool {
+    if tool.contains(std::path::MAIN_SEPARATOR) {
+        return is_executable_path(Path::new(tool));
+    }
+
+    let Some(path_var) = std::env::var_os("PATH") else {
+        return false;
+    };
+
+    let path_exts: Vec<String> = if cfg!(windows) {
+        std::env::var("PATHEXT")
+            .unwrap_or_else(|_| ".EXE;.CMD;.BAT;.COM".to_string())
+            .split(';')
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_ascii_lowercase())
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    for dir in std::env::split_paths(&path_var) {
+        let candidate = dir.join(tool);
+        if is_executable_path(&candidate) {
+            return true;
+        }
+
+        if cfg!(windows) {
+            let base: PathBuf = candidate;
+            for ext in &path_exts {
+                let ext_no_dot = ext.trim_start_matches('.');
+                let with_ext = base.with_extension(ext_no_dot);
+                if is_executable_path(&with_ext) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    false
+}
+
+pub fn command_exists_cached(tool: &str) -> bool {
+    static CACHE: OnceLock<Mutex<HashMap<String, bool>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+
+    if let Ok(guard) = cache.lock() {
+        if let Some(found) = guard.get(tool) {
+            return *found;
+        }
+    }
+
+    let exists = command_exists_in_path(tool);
+    if let Ok(mut guard) = cache.lock() {
+        guard.insert(tool.to_string(), exists);
+    }
+    exists
+}
+
 /// Build a Command using the detected package manager's exec mechanism.
 /// Returns a Command ready to have tool-specific args appended.
 pub fn package_manager_exec(tool: &str) -> Command {
-    let tool_exists = Command::new("which")
-        .arg(tool)
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false);
+    let tool_exists = command_exists_cached(tool);
 
     if tool_exists {
         Command::new(tool)
