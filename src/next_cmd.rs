@@ -1,5 +1,5 @@
 use crate::tracking;
-use crate::utils::{strip_ansi, truncate};
+use crate::utils::{run_command_streaming, strip_ansi, truncate};
 use anyhow::{Context, Result};
 use regex::Regex;
 use std::borrow::Cow;
@@ -34,8 +34,7 @@ pub fn run(args: &[String], verbose: u8) -> Result<()> {
         eprintln!("Running: {} build", tool);
     }
 
-    let output = cmd
-        .output()
+    let output = run_command_streaming(&mut cmd)
         .context("Failed to run next build (try: npm install -g next)")?;
 
     let mut raw = String::with_capacity(output.stdout.len() + output.stderr.len() + 1);

@@ -7,7 +7,9 @@
 
 use anyhow::{Context, Result};
 use regex::Regex;
+use std::io::Read;
 use std::process::{Command, ExitStatus};
+use std::thread;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -30,6 +32,81 @@ pub fn exit_code_error(code: i32, message: impl Into<String>) -> anyhow::Error {
 pub fn status_code_error(status: ExitStatus, message: impl Into<String>) -> anyhow::Error {
     let code = status.code().unwrap_or(1);
     exit_code_error(code, message)
+}
+
+/// Captured output for streaming command execution.
+pub struct StreamedOutput {
+    pub status: ExitStatus,
+    pub stdout: Vec<u8>,
+    pub stderr: Vec<u8>,
+}
+
+/// Run a command by streaming stdout/stderr pipes incrementally into memory.
+///
+/// Unlike `Command::output()`, this avoids waiting for process completion
+/// before draining pipes, which is safer for very verbose commands.
+pub fn run_command_streaming(cmd: &mut Command) -> Result<StreamedOutput> {
+    let mut child = cmd
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .context("Failed to spawn command")?;
+
+    let stdout_handle = child.stdout.take().map(|stdout| {
+        thread::spawn(move || -> std::io::Result<Vec<u8>> {
+            let mut reader = std::io::BufReader::new(stdout);
+            let mut out = Vec::new();
+            let mut buf = [0u8; 8192];
+            loop {
+                let n = reader.read(&mut buf)?;
+                if n == 0 {
+                    break;
+                }
+                out.extend_from_slice(&buf[..n]);
+            }
+            Ok(out)
+        })
+    });
+
+    let stderr_handle = child.stderr.take().map(|stderr| {
+        thread::spawn(move || -> std::io::Result<Vec<u8>> {
+            let mut reader = std::io::BufReader::new(stderr);
+            let mut out = Vec::new();
+            let mut buf = [0u8; 8192];
+            loop {
+                let n = reader.read(&mut buf)?;
+                if n == 0 {
+                    break;
+                }
+                out.extend_from_slice(&buf[..n]);
+            }
+            Ok(out)
+        })
+    });
+
+    let status = child.wait().context("Failed waiting for command")?;
+
+    let stdout = match stdout_handle {
+        Some(handle) => handle
+            .join()
+            .map_err(|_| anyhow::anyhow!("stdout reader thread panicked"))?
+            .context("Failed reading stdout")?,
+        None => Vec::new(),
+    };
+
+    let stderr = match stderr_handle {
+        Some(handle) => handle
+            .join()
+            .map_err(|_| anyhow::anyhow!("stderr reader thread panicked"))?
+            .context("Failed reading stderr")?,
+        None => Vec::new(),
+    };
+
+    Ok(StreamedOutput {
+        status,
+        stdout,
+        stderr,
+    })
 }
 
 /// Extract an exit code from an anyhow error if it wraps ExitCodeError.

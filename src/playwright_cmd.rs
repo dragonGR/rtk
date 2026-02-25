@@ -1,5 +1,5 @@
 use crate::tracking;
-use crate::utils::{detect_package_manager, strip_ansi};
+use crate::utils::{detect_package_manager, run_command_streaming, strip_ansi};
 use anyhow::{Context, Result};
 use regex::Regex;
 use serde::Deserialize;
@@ -283,8 +283,7 @@ pub fn run(args: &[String], verbose: u8) -> Result<()> {
         eprintln!("Running: playwright {}", args.join(" "));
     }
 
-    let output = cmd
-        .output()
+    let output = run_command_streaming(&mut cmd)
         .context("Failed to run playwright (try: npm install -g playwright)")?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);

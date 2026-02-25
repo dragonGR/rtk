@@ -7,7 +7,7 @@ use crate::parser::{
     FormatMode, OutputParser, ParseResult, TestFailure, TestResult, TokenFormatter,
 };
 use crate::tracking;
-use crate::utils::{package_manager_exec, strip_ansi};
+use crate::utils::{package_manager_exec, run_command_streaming, strip_ansi};
 
 /// Vitest JSON output structures (tool-specific format)
 #[derive(Debug, Deserialize)]
@@ -232,7 +232,7 @@ fn run_vitest(args: &[String], verbose: u8) -> Result<()> {
         cmd.arg(arg);
     }
 
-    let output = cmd.output().context("Failed to run vitest")?;
+    let output = run_command_streaming(&mut cmd).context("Failed to run vitest")?;
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     let combined = format!("{}{}", stdout, stderr);
