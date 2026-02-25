@@ -115,16 +115,9 @@ pub fn run(
     let mut total = 0;
 
     for line in stdout.lines() {
-        let parts: Vec<&str> = line.splitn(3, ':').collect();
-
-        let (file, line_num, content) = if parts.len() == 3 {
-            let ln = parts[1].parse().unwrap_or(0);
-            (parts[0].to_string(), ln, parts[2])
-        } else if parts.len() == 2 {
-            let ln = parts[0].parse().unwrap_or(0);
-            (path.to_string(), ln, parts[1])
-        } else {
-            continue;
+        let (file, line_num, content) = match parse_search_line(line, path) {
+            Some(parsed) => parsed,
+            None => continue,
         };
 
         total += 1;
@@ -284,6 +277,21 @@ fn parse_control_flags(extra_args: &[String]) -> (Vec<String>, bool) {
     (filtered, disable_default_excludes)
 }
 
+fn parse_search_line<'a>(line: &'a str, default_path: &str) -> Option<(String, usize, &'a str)> {
+    let mut parts = line.splitn(3, ':');
+    let first = parts.next()?;
+    let second = parts.next()?;
+    let third = parts.next();
+
+    if let Some(content) = third {
+        let ln = second.parse().unwrap_or(0);
+        return Some((first.to_string(), ln, content));
+    }
+
+    let ln = first.parse().unwrap_or(0);
+    Some((default_path.to_string(), ln, second))
+}
+
 fn rg_available_cached() -> bool {
     static RG_AVAILABLE: OnceLock<bool> = OnceLock::new();
     *RG_AVAILABLE.get_or_init(|| {
@@ -417,5 +425,21 @@ mod tests {
         let (filtered, disabled) = parse_control_flags(&args);
         assert!(disabled);
         assert_eq!(filtered, vec!["-i", "-A", "2"]);
+    }
+
+    #[test]
+    fn test_parse_search_line_file_line_content() {
+        let parsed = parse_search_line("src/main.rs:42:fn run()", ".").unwrap();
+        assert_eq!(parsed.0, "src/main.rs");
+        assert_eq!(parsed.1, 42);
+        assert_eq!(parsed.2, "fn run()");
+    }
+
+    #[test]
+    fn test_parse_search_line_line_content_only() {
+        let parsed = parse_search_line("12:hello", "README.md").unwrap();
+        assert_eq!(parsed.0, "README.md");
+        assert_eq!(parsed.1, 12);
+        assert_eq!(parsed.2, "hello");
     }
 }
