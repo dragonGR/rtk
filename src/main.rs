@@ -192,8 +192,9 @@ enum Commands {
 
     /// pnpm commands with ultra-compact output
     Pnpm {
-        #[command(subcommand)]
-        command: PnpmCommands,
+        /// pnpm arguments (subcommand + options)
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<OsString>,
     },
 
     /// Run command and show only errors/warnings
@@ -696,48 +697,6 @@ enum GitCommands {
 }
 
 #[derive(Subcommand)]
-enum PnpmCommands {
-    /// List installed packages (ultra-dense)
-    List {
-        /// Depth level (default: 0)
-        #[arg(short, long, default_value = "0")]
-        depth: usize,
-        /// Additional pnpm arguments
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        args: Vec<String>,
-    },
-    /// Show outdated packages (condensed: "pkg: old → new")
-    Outdated {
-        /// Additional pnpm arguments
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        args: Vec<String>,
-    },
-    /// Install packages (filter progress bars)
-    Install {
-        /// Packages to install
-        packages: Vec<String>,
-        /// Additional pnpm arguments
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        args: Vec<String>,
-    },
-    /// Build (delegates to next build filter)
-    Build {
-        /// Additional build arguments
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        args: Vec<String>,
-    },
-    /// Typecheck (delegates to tsc filter)
-    Typecheck {
-        /// Additional typecheck arguments
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        args: Vec<String>,
-    },
-    /// Passthrough: runs any unsupported pnpm subcommand directly
-    #[command(external_subcommand)]
-    Other(Vec<OsString>),
-}
-
-#[derive(Subcommand)]
 enum DockerCommands {
     /// List running containers
     Ps,
@@ -1208,30 +1167,47 @@ fn run() -> Result<()> {
             psql_cmd::run(&args, cli.verbose)?;
         }
 
-        Commands::Pnpm { command } => match command {
-            PnpmCommands::List { depth, args } => {
-                pnpm_cmd::run(pnpm_cmd::PnpmCommand::List { depth }, &args, cli.verbose)?;
-            }
-            PnpmCommands::Outdated { args } => {
-                pnpm_cmd::run(pnpm_cmd::PnpmCommand::Outdated, &args, cli.verbose)?;
-            }
-            PnpmCommands::Install { packages, args } => {
-                pnpm_cmd::run(
-                    pnpm_cmd::PnpmCommand::Install { packages },
-                    &args,
-                    cli.verbose,
-                )?;
-            }
-            PnpmCommands::Build { args } => {
-                next_cmd::run(&args, cli.verbose)?;
-            }
-            PnpmCommands::Typecheck { args } => {
-                tsc_cmd::run(&args, cli.verbose)?;
-            }
-            PnpmCommands::Other(args) => {
+        Commands::Pnpm { args } => {
+            if args.is_empty() {
                 pnpm_cmd::run_passthrough(&args, cli.verbose)?;
+            } else {
+                // Safety-first routing: only route when subcommand is clearly first token.
+                // If command starts with global flags (e.g. --filter), passthrough unchanged.
+                let first = args[0].to_string_lossy();
+                let rest: Vec<String> = args[1..]
+                    .iter()
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .collect();
+                if first.starts_with('-') {
+                    pnpm_cmd::run_passthrough(&args, cli.verbose)?;
+                } else {
+                    match first.as_ref() {
+                        "list" | "ls" => {
+                            pnpm_cmd::run(pnpm_cmd::PnpmCommand::List { depth: 0 }, &rest, cli.verbose)?;
+                        }
+                        "outdated" => {
+                            pnpm_cmd::run(pnpm_cmd::PnpmCommand::Outdated, &rest, cli.verbose)?;
+                        }
+                        "install" | "add" => {
+                            pnpm_cmd::run(
+                                pnpm_cmd::PnpmCommand::Install { packages: Vec::new() },
+                                &rest,
+                                cli.verbose,
+                            )?;
+                        }
+                        "build" => {
+                            next_cmd::run(&rest, cli.verbose)?;
+                        }
+                        "typecheck" => {
+                            tsc_cmd::run(&rest, cli.verbose)?;
+                        }
+                        _ => {
+                            pnpm_cmd::run_passthrough(&args, cli.verbose)?;
+                        }
+                    }
+                }
             }
-        },
+        }
 
         Commands::Err { command } => {
             let cmd = command.join(" ");
