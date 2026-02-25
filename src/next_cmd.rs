@@ -2,6 +2,7 @@ use crate::tracking;
 use crate::utils::{strip_ansi, truncate};
 use anyhow::{Context, Result};
 use regex::Regex;
+use std::borrow::Cow;
 use std::process::Command;
 
 pub fn run(args: &[String], verbose: u8) -> Result<()> {
@@ -36,9 +37,13 @@ pub fn run(args: &[String], verbose: u8) -> Result<()> {
     let output = cmd
         .output()
         .context("Failed to run next build (try: npm install -g next)")?;
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let raw = format!("{}\n{}", stdout, stderr);
+
+    let mut raw = String::with_capacity(output.stdout.len() + output.stderr.len() + 1);
+    raw.push_str(&String::from_utf8_lossy(&output.stdout));
+    if !output.stderr.is_empty() {
+        raw.push('\n');
+        raw.push_str(&String::from_utf8_lossy(&output.stderr));
+    }
 
     let filtered = filter_next_build(&raw);
 
@@ -76,10 +81,29 @@ fn filter_next_build(output: &str) -> String {
     let mut errors = 0;
     let mut build_time = String::new();
 
-    // Strip ANSI codes
-    let clean_output = strip_ansi(output);
+    let mut saw_already_optimized = false;
+    let mut saw_cache = false;
+    let mut saw_ready = false;
 
-    for line in clean_output.lines() {
+    for raw_line in output.lines() {
+        // Strip ANSI per-line to avoid keeping a second full-sized output string in memory.
+        let clean_line: Cow<'_, str> = if raw_line.contains('\u{1b}') {
+            Cow::Owned(strip_ansi(raw_line))
+        } else {
+            Cow::Borrowed(raw_line)
+        };
+        let line = clean_line.as_str();
+
+        if line.contains("already optimized") {
+            saw_already_optimized = true;
+        }
+        if line.contains("Cache") {
+            saw_cache = true;
+        }
+        if line.contains("Ready") {
+            saw_ready = true;
+        }
+
         // Count route types by symbol
         if line.starts_with("○") {
             routes_static += 1;
@@ -124,9 +148,7 @@ fn filter_next_build(output: &str) -> String {
     }
 
     // Detect if build was skipped (already built)
-    let already_built = clean_output.contains("already optimized")
-        || clean_output.contains("Cache")
-        || (routes_total == 0 && clean_output.contains("Ready"));
+    let already_built = saw_already_optimized || saw_cache || (routes_total == 0 && saw_ready);
 
     // Build filtered output
     let mut result = String::new();

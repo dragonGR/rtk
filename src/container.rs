@@ -36,14 +36,13 @@ fn docker_ps(_verbose: u8) -> Result<()> {
         .output()
         .context("Failed to run docker ps")?;
 
-    let raw = String::from_utf8_lossy(&output.stdout).to_string();
     let stdout = String::from_utf8_lossy(&output.stdout);
     let mut rtk = String::new();
 
     if stdout.trim().is_empty() {
         rtk.push_str("🐳 0 containers");
         println!("{}", rtk);
-        timer.track("docker ps", "rtk docker ps", &raw, &rtk);
+        timer.track("docker ps", "rtk docker ps", &stdout, &rtk);
         return Ok(());
     }
 
@@ -72,7 +71,7 @@ fn docker_ps(_verbose: u8) -> Result<()> {
     }
 
     print!("{}", rtk);
-    timer.track("docker ps", "rtk docker ps", &raw, &rtk);
+    timer.track("docker ps", "rtk docker ps", &stdout, &rtk);
     Ok(())
 }
 
@@ -84,7 +83,6 @@ fn docker_images(_verbose: u8) -> Result<()> {
         .output()
         .context("Failed to run docker images")?;
 
-    let raw = String::from_utf8_lossy(&output.stdout).to_string();
     let stdout = String::from_utf8_lossy(&output.stdout);
     let lines: Vec<&str> = stdout.lines().collect();
     let mut rtk = String::new();
@@ -92,7 +90,7 @@ fn docker_images(_verbose: u8) -> Result<()> {
     if lines.is_empty() {
         rtk.push_str("🐳 0 images");
         println!("{}", rtk);
-        timer.track("docker images", "rtk docker images", &raw, &rtk);
+        timer.track("docker images", "rtk docker images", &stdout, &rtk);
         return Ok(());
     }
 
@@ -137,7 +135,7 @@ fn docker_images(_verbose: u8) -> Result<()> {
     }
 
     print!("{}", rtk);
-    timer.track("docker images", "rtk docker images", &raw, &rtk);
+    timer.track("docker images", "rtk docker images", &stdout, &rtk);
     Ok(())
 }
 
@@ -556,16 +554,15 @@ pub fn run_compose_ps(verbose: u8) -> Result<()> {
         eprintln!("{}", stderr);
         return Err(crate::utils::status_code_error(output.status, "command failed"));
     }
-    let structured = String::from_utf8_lossy(&output.stdout).to_string();
-    let raw = structured.clone();
+    let structured = String::from_utf8_lossy(&output.stdout);
 
     if verbose > 0 {
-        eprintln!("raw docker compose ps:\n{}", raw);
+        eprintln!("raw docker compose ps:\n{}", structured);
     }
 
     let rtk = format_compose_ps(&structured);
     println!("{}", rtk);
-    timer.track("docker compose ps", "rtk docker compose ps", &raw, &rtk);
+    timer.track("docker compose ps", "rtk docker compose ps", &structured, &rtk);
     Ok(())
 }
 
