@@ -1,7 +1,6 @@
 use crate::tracking;
 use crate::utils::{run_command_streaming, strip_ansi, truncate};
 use anyhow::{Context, Result};
-use regex::Regex;
 use std::borrow::Cow;
 use std::process::Command;
 
@@ -60,18 +59,6 @@ pub fn run(args: &[String], verbose: u8) -> Result<()> {
 
 /// Filter Next.js build output - extract routes, bundles, warnings
 fn filter_next_build(output: &str) -> String {
-    lazy_static::lazy_static! {
-        // Route line pattern: ○ /dashboard    1.2 kB  132 kB
-        static ref ROUTE_PATTERN: Regex = Regex::new(
-            r"^[○●◐λ✓]\s+(/[^\s]*)\s+(\d+(?:\.\d+)?)\s*(kB|B)"
-        ).unwrap();
-
-        // Bundle size pattern
-        static ref BUNDLE_PATTERN: Regex = Regex::new(
-            r"^[○●◐λ✓]\s+([\w/\-\.]+)\s+(\d+(?:\.\d+)?)\s*(kB|B)\s+(\d+(?:\.\d+)?)\s*(kB|B)"
-        ).unwrap();
-    }
-
     let mut routes_static = 0;
     let mut routes_dynamic = 0;
     let mut routes_total = 0;
@@ -115,10 +102,7 @@ fn filter_next_build(output: &str) -> String {
         }
 
         // Extract bundle information (route + size + total size)
-        if let Some(caps) = BUNDLE_PATTERN.captures(line) {
-            let route = caps[1].to_string();
-            let size: f64 = caps[2].parse().unwrap_or(0.0);
-            let total: f64 = caps[4].parse().unwrap_or(0.0);
+        if let Some((route, size, total)) = parse_bundle_line(line) {
 
             // Calculate percentage increase if both sizes present
             let pct_change = if total > 0.0 {
@@ -207,13 +191,50 @@ fn filter_next_build(output: &str) -> String {
 
 /// Extract time from build output (e.g., "Compiled in 34.2s")
 fn extract_time(line: &str) -> Option<String> {
-    lazy_static::lazy_static! {
-        static ref TIME_RE: Regex = Regex::new(r"(\d+(?:\.\d+)?)\s*(s|ms)").unwrap();
-    }
+    let bytes = line.as_bytes();
+    let mut i = 0usize;
 
-    TIME_RE
-        .captures(line)
-        .map(|caps| format!("{}{}", &caps[1], &caps[2]))
+    while i < bytes.len() {
+        if bytes[i].is_ascii_digit() {
+            let start = i;
+            i += 1;
+            while i < bytes.len() && (bytes[i].is_ascii_digit() || bytes[i] == b'.') {
+                i += 1;
+            }
+            let number = &line[start..i];
+
+            while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+                i += 1;
+            }
+
+            if i + 1 < bytes.len() && bytes[i] == b'm' && bytes[i + 1] == b's' {
+                return Some(format!("{}ms", number));
+            }
+            if i < bytes.len() && bytes[i] == b's' {
+                return Some(format!("{}s", number));
+            }
+        } else {
+            i += 1;
+        }
+    }
+    None
+}
+
+fn parse_bundle_line(line: &str) -> Option<(String, f64, f64)> {
+    let trimmed = line.trim_start_matches(|c: char| {
+        c.is_whitespace() || matches!(c, '│' | '├' | '└' | '┌' | '─')
+    });
+    let mut parts = trimmed.split_whitespace();
+    let marker = parts.next()?;
+    if !matches!(marker, "○" | "●" | "◐" | "λ" | "✓") {
+        return None;
+    }
+    let route = parts.next()?.to_string();
+    let size: f64 = parts.next()?.parse().ok()?;
+    let _size_unit = parts.next()?;
+    let total: f64 = parts.next()?.parse().ok()?;
+    let _total_unit = parts.next()?;
+    Some((route, size, total))
 }
 
 #[cfg(test)]
