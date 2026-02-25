@@ -1,7 +1,6 @@
 use crate::tracking;
 use crate::utils::truncate;
 use anyhow::{Context, Result};
-use regex::Regex;
 use std::process::{Command, Stdio};
 
 /// Run a command and provide a heuristic summary
@@ -290,8 +289,25 @@ fn summarize_generic(output: &str, result: &mut Vec<String>) {
 }
 
 fn extract_number(text: &str, after: &str) -> Option<usize> {
-    let re = Regex::new(&format!(r"(\d+)\s*{}", after)).ok()?;
-    re.captures(text)
-        .and_then(|c| c.get(1))
-        .and_then(|m| m.as_str().parse().ok())
+    let lower = text.to_lowercase();
+    let marker = after.to_lowercase();
+    let marker_pos = lower.find(&marker)?;
+
+    let bytes = lower.as_bytes();
+    let mut i = marker_pos;
+
+    while i > 0 && bytes[i - 1].is_ascii_whitespace() {
+        i -= 1;
+    }
+
+    let end = i;
+    while i > 0 && bytes[i - 1].is_ascii_digit() {
+        i -= 1;
+    }
+
+    if i == end {
+        return None;
+    }
+
+    lower[i..end].parse().ok()
 }

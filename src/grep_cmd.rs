@@ -1,6 +1,5 @@
 use crate::tracking;
 use anyhow::{Context, Result};
-use regex::Regex;
 use std::collections::HashMap;
 use std::process::{Command, Output};
 use std::sync::OnceLock;
@@ -177,12 +176,11 @@ fn clean_line(line: &str, max_len: usize, context_only: bool, pattern: &str) -> 
     let trimmed = line.trim();
 
     if context_only {
-        if let Ok(re) = Regex::new(&format!("(?i).{{0,20}}{}.*", regex::escape(pattern))) {
-            if let Some(m) = re.find(trimmed) {
-                let matched = m.as_str();
-                if matched.len() <= max_len {
-                    return matched.to_string();
-                }
+        if let Some(start) = find_case_insensitive(trimmed, pattern) {
+            let prefix_start = floor_char_boundary(trimmed, start.saturating_sub(20));
+            let matched = &trimmed[prefix_start..];
+            if matched.len() <= max_len {
+                return matched.to_string();
             }
         }
     }
@@ -219,6 +217,55 @@ fn clean_line(line: &str, max_len: usize, context_only: bool, pattern: &str) -> 
             format!("{}...", t)
         }
     }
+}
+
+fn floor_char_boundary(s: &str, mut idx: usize) -> usize {
+    if idx > s.len() {
+        idx = s.len();
+    }
+    while idx > 0 && !s.is_char_boundary(idx) {
+        idx -= 1;
+    }
+    idx
+}
+
+fn find_case_insensitive(haystack: &str, needle: &str) -> Option<usize> {
+    if needle.is_empty() {
+        return Some(0);
+    }
+
+    let mut lower_needle = String::with_capacity(needle.len());
+    lower_needle.extend(needle.chars().flat_map(|c| c.to_lowercase()));
+
+    let mut idx = 0usize;
+    while idx < haystack.len() {
+        if !haystack.is_char_boundary(idx) {
+            idx += 1;
+            continue;
+        }
+
+        let suffix = &haystack[idx..];
+        let mut lower_prefix = String::with_capacity(lower_needle.len());
+        for ch in suffix.chars() {
+            for lc in ch.to_lowercase() {
+                lower_prefix.push(lc);
+                if lower_prefix.len() >= lower_needle.len() {
+                    break;
+                }
+            }
+            if lower_prefix.len() >= lower_needle.len() {
+                break;
+            }
+        }
+
+        if lower_prefix == lower_needle {
+            return Some(idx);
+        }
+
+        idx += suffix.chars().next().map_or(1, |c| c.len_utf8());
+    }
+
+    None
 }
 
 fn compact_path(path: &str) -> String {
