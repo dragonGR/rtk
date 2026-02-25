@@ -1,4 +1,5 @@
 use crate::config::Config;
+use std::io::Write;
 use std::path::PathBuf;
 
 /// Minimum output size to tee (smaller outputs don't need recovery)
@@ -118,18 +119,18 @@ fn write_tee_file(
     let filename = format!("{}_{}.log", epoch, slug);
     let filepath = tee_dir.join(filename);
 
-    // Truncate at max_file_size
-    let content = if raw.len() > max_file_size {
-        format!(
-            "{}\n\n--- truncated at {} bytes ---",
-            &raw[..max_file_size],
-            max_file_size
-        )
+    // Stream through a buffered writer to avoid large temporary string allocation.
+    let file = std::fs::File::create(&filepath).ok()?;
+    let mut writer = std::io::BufWriter::new(file);
+    if raw.len() > max_file_size {
+        writer.write_all(&raw.as_bytes()[..max_file_size]).ok()?;
+        writer
+            .write_all(format!("\n\n--- truncated at {} bytes ---", max_file_size).as_bytes())
+            .ok()?;
     } else {
-        raw.to_string()
-    };
-
-    std::fs::write(&filepath, content).ok()?;
+        writer.write_all(raw.as_bytes()).ok()?;
+    }
+    writer.flush().ok()?;
 
     // Rotate old files asynchronously to keep command return path fast.
     let rotate_dir = tee_dir.to_path_buf();
