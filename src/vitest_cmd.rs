@@ -46,6 +46,7 @@ struct VitestTest {
 
 /// Parser for Vitest JSON output
 pub struct VitestParser;
+const MAX_VITEST_PARSE_BYTES: usize = 4 * 1024 * 1024;
 
 impl OutputParser for VitestParser {
     type Output = TestResult;
@@ -237,8 +238,12 @@ fn run_vitest(args: &[String], verbose: u8) -> Result<()> {
     let stderr = String::from_utf8_lossy(&output.stderr);
     let combined = concat_streams(&stdout, &stderr, false);
 
-    // Parse output using VitestParser
-    let parse_result = VitestParser::parse(&stdout);
+    // Guard: avoid expensive full parse on very large outputs.
+    let parse_result = if stdout.len() > MAX_VITEST_PARSE_BYTES {
+        ParseResult::Passthrough(truncate_output(&stdout, 1200))
+    } else {
+        VitestParser::parse(&stdout)
+    };
     let mode = FormatMode::from_verbosity(verbose);
 
     let filtered = match parse_result {

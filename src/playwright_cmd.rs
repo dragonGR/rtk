@@ -79,6 +79,7 @@ struct PlaywrightError {
 
 /// Parser for Playwright JSON output
 pub struct PlaywrightParser;
+const MAX_PLAYWRIGHT_PARSE_BYTES: usize = 4 * 1024 * 1024;
 
 impl OutputParser for PlaywrightParser {
     type Output = TestResult;
@@ -290,8 +291,12 @@ pub fn run(args: &[String], verbose: u8) -> Result<()> {
     let stderr = String::from_utf8_lossy(&output.stderr);
     let raw = concat_streams(&stdout, &stderr, true);
 
-    // Parse output using PlaywrightParser
-    let parse_result = PlaywrightParser::parse(&stdout);
+    // Guard: avoid expensive full parse on very large outputs.
+    let parse_result = if stdout.len() > MAX_PLAYWRIGHT_PARSE_BYTES {
+        ParseResult::Passthrough(truncate_output(&stdout, 1200))
+    } else {
+        PlaywrightParser::parse(&stdout)
+    };
     let mode = FormatMode::from_verbosity(verbose);
 
     let filtered = match parse_result {

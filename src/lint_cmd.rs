@@ -7,6 +7,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::process::Command;
+const MAX_LINT_JSON_PARSE_BYTES: usize = 4 * 1024 * 1024;
 
 #[derive(Debug, Deserialize, Serialize)]
 struct EslintMessage {
@@ -202,6 +203,14 @@ pub fn run(args: &[String], verbose: u8) -> Result<()> {
 
 /// Filter ESLint JSON output - group by rule and file
 fn filter_eslint_json(output: &str) -> String {
+    if output.len() > MAX_LINT_JSON_PARSE_BYTES {
+        return format!(
+            "ESLint output too large for structured parse ({} bytes)\n{}",
+            output.len(),
+            truncate(output, 1200)
+        );
+    }
+
     let results: Result<Vec<EslintResult>, _> = serde_json::from_str(output);
 
     let results = match results {
