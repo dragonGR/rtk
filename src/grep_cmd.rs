@@ -110,8 +110,9 @@ pub fn run(
         return Ok(());
     }
 
-    let mut by_file: HashMap<String, Vec<(usize, String)>> = HashMap::new();
-    let mut total = 0;
+    let line_hint = stdout.lines().size_hint().0;
+    let mut by_file: HashMap<String, Vec<(usize, String)>> = HashMap::with_capacity(line_hint);
+    let mut total: usize = 0;
 
     for line in stdout.lines() {
         let (file, line_num, content) = match parse_search_line(line, path) {
@@ -121,10 +122,10 @@ pub fn run(
 
         total += 1;
         let cleaned = clean_line(content, max_line_len, context_only, pattern);
-        by_file.entry(file).or_default().push((line_num, cleaned));
+        by_file.entry(file.to_string()).or_default().push((line_num, cleaned));
     }
 
-    let mut rtk_output = String::new();
+    let mut rtk_output = String::with_capacity((total.saturating_mul(48)).min(256 * 1024));
     rtk_output.push_str(&format!("🔍 {} in {}F:\n\n", total, by_file.len()));
 
     let mut shown = 0;
@@ -324,7 +325,7 @@ fn parse_control_flags(extra_args: &[String]) -> (Vec<String>, bool) {
     (filtered, disable_default_excludes)
 }
 
-fn parse_search_line<'a>(line: &'a str, default_path: &str) -> Option<(String, usize, &'a str)> {
+fn parse_search_line<'a>(line: &'a str, default_path: &'a str) -> Option<(&'a str, usize, &'a str)> {
     let mut parts = line.splitn(3, ':');
     let first = parts.next()?;
     let second = parts.next()?;
@@ -332,11 +333,11 @@ fn parse_search_line<'a>(line: &'a str, default_path: &str) -> Option<(String, u
 
     if let Some(content) = third {
         let ln = second.parse().unwrap_or(0);
-        return Some((first.to_string(), ln, content));
+        return Some((first, ln, content));
     }
 
     let ln = first.parse().unwrap_or(0);
-    Some((default_path.to_string(), ln, second))
+    Some((default_path, ln, second))
 }
 
 fn rg_available_cached() -> bool {
