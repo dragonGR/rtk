@@ -53,10 +53,11 @@ impl OutputParser for VitestParser {
 
     fn parse(input: &str) -> ParseResult<TestResult> {
         // Tier 1: Try JSON parsing (with extraction fallback for pnpm/dotenv prefixes)
-        let json_result = serde_json::from_str::<VitestJsonOutput>(input).or_else(|first_err| {
+        let json_result =
+            serde_json::from_slice::<VitestJsonOutput>(input.as_bytes()).or_else(|first_err| {
             // Fallback: Try extracting JSON object from prefixed output
             if let Some(extracted) = extract_json_object(input) {
-                serde_json::from_str::<VitestJsonOutput>(extracted)
+                serde_json::from_slice::<VitestJsonOutput>(extracted.as_bytes())
             } else {
                 Err(first_err)
             }

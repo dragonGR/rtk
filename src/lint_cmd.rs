@@ -211,7 +211,7 @@ fn filter_eslint_json(output: &str) -> String {
         );
     }
 
-    let results: Result<Vec<EslintResult>, _> = serde_json::from_str(output);
+    let results: Result<Vec<EslintResult>, _> = serde_json::from_slice(output.as_bytes());
 
     let results = match results {
         Ok(r) => r,
@@ -303,7 +303,7 @@ fn filter_eslint_json(output: &str) -> String {
 
 /// Filter pylint JSON2 output - group by symbol and file
 fn filter_pylint_json(output: &str) -> String {
-    let diagnostics: Result<Vec<PylintDiagnostic>, _> = serde_json::from_str(output);
+    let diagnostics: Result<Vec<PylintDiagnostic>, _> = serde_json::from_slice(output.as_bytes());
 
     let diagnostics = match diagnostics {
         Ok(d) => d,

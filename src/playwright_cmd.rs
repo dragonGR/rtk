@@ -86,7 +86,7 @@ impl OutputParser for PlaywrightParser {
 
     fn parse(input: &str) -> ParseResult<TestResult> {
         // Tier 1: Try JSON parsing
-        match serde_json::from_str::<PlaywrightJsonOutput>(input) {
+        match serde_json::from_slice::<PlaywrightJsonOutput>(input.as_bytes()) {
             Ok(json) => {
                 let mut failures = Vec::new();
                 let mut total = 0;
