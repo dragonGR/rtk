@@ -34,6 +34,48 @@ if [ -z "$CMD" ]; then
   exit 0
 fi
 
+_matches_deny() {
+  local cmd="$1"
+  shift
+
+  for settings_file in "$@"; do
+    [ -f "$settings_file" ] || continue
+    while IFS= read -r raw; do
+      [ -z "$raw" ] && continue
+      local inner="${raw#Bash(}"
+      inner="${inner%)}"
+      if [[ "$inner" == *":*" ]]; then
+        local prefix="${inner%:*}"
+        [[ "$cmd" == "$prefix" || "$cmd" == "$prefix "* ]] && return 0
+      else
+        [[ "$cmd" == "$inner" || "$cmd" == "$inner "* ]] && return 0
+      fi
+    done < <(jq -r '.permissions.deny[]? | select(startswith("Bash("))' "$settings_file" 2>/dev/null)
+  done
+
+  return 1
+}
+
+# Respect Claude permission deny rules before rewrite decision.
+PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
+if [ -z "$PROJECT_ROOT" ]; then
+  _dir="$PWD"
+  while [ "$_dir" != "/" ]; do
+    [ -f "$_dir/.claude/settings.json" ] && { PROJECT_ROOT="$_dir"; break; }
+    _dir=$(dirname "$_dir")
+  done
+fi
+
+DENY_SOURCES=()
+[ -n "$PROJECT_ROOT" ] && DENY_SOURCES+=("$PROJECT_ROOT/.claude/settings.json" "$PROJECT_ROOT/.claude/settings.local.json")
+DENY_SOURCES+=("$HOME/.claude/settings.json" "$HOME/.claude/settings.local.json")
+
+# Match deny patterns against first command segment.
+FIRST_CMD=$(echo "$CMD" | sed -E 's/[[:space:]]*(&&|\|\||;|\|).*//' | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')
+if [ -n "$FIRST_CMD" ] && _matches_deny "$FIRST_CMD" "${DENY_SOURCES[@]}"; then
+  exit 0
+fi
+
 # Delegate all rewrite logic to the Rust binary.
 # rtk rewrite exits 1 when there's no rewrite — hook passes through silently.
 REWRITTEN=$(rtk rewrite "$CMD" 2>/dev/null) || exit 0
