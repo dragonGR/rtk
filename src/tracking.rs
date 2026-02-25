@@ -35,7 +35,8 @@ use rusqlite::{params, Connection};
 use serde::Serialize;
 use std::ffi::OsString;
 use std::path::PathBuf;
-use std::time::Instant;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 // ── Project path helpers ── // added: project-scoped tracking support
 
@@ -63,6 +64,8 @@ fn project_filter_params(project_path: Option<&str>) -> (Option<String>, Option<
 
 /// Number of days to retain tracking history before automatic cleanup.
 const HISTORY_DAYS: i64 = 90;
+const SCHEMA_VERSION: i32 = 1;
+const CLEANUP_INTERVAL: Duration = Duration::from_secs(60 * 60);
 
 /// Main tracking interface for recording and querying command history.
 ///
@@ -91,6 +94,7 @@ const HISTORY_DAYS: i64 = 90;
 /// ```
 pub struct Tracker {
     conn: Connection,
+    last_cleanup: Mutex<Option<Instant>>,
 }
 
 /// Individual command record from tracking history.
@@ -251,6 +255,15 @@ impl Tracker {
         }
 
         let conn = Connection::open(&db_path)?;
+        Self::initialize_database(&conn)?;
+
+        Ok(Self {
+            conn,
+            last_cleanup: Mutex::new(None),
+        })
+    }
+
+    fn initialize_database(conn: &Connection) -> Result<()> {
         conn.execute(
             "CREATE TABLE IF NOT EXISTS commands (
                 id INTEGER PRIMARY KEY,
@@ -260,7 +273,8 @@ impl Tracker {
                 input_tokens INTEGER NOT NULL,
                 output_tokens INTEGER NOT NULL,
                 saved_tokens INTEGER NOT NULL,
-                savings_pct REAL NOT NULL
+                savings_pct REAL NOT NULL,
+                exec_time_ms INTEGER NOT NULL DEFAULT 0
             )",
             [],
         )?;
@@ -270,11 +284,13 @@ impl Tracker {
             [],
         )?;
 
-        // Migration: add exec_time_ms column if it doesn't exist
-        let _ = conn.execute(
-            "ALTER TABLE commands ADD COLUMN exec_time_ms INTEGER DEFAULT 0",
-            [],
-        );
+        // Backfill migration for databases created before exec_time_ms existed.
+        if !Self::column_exists(conn, "commands", "exec_time_ms")? {
+            conn.execute(
+                "ALTER TABLE commands ADD COLUMN exec_time_ms INTEGER DEFAULT 0",
+                [],
+            )?;
+        }
         // Migration: add project_path column with DEFAULT '' for new rows // changed: added DEFAULT
         let _ = conn.execute(
             "ALTER TABLE commands ADD COLUMN project_path TEXT DEFAULT ''",
@@ -315,7 +331,19 @@ impl Tracker {
             [],
         )?;
 
-        Ok(Self { conn })
+        conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+        Ok(())
+    }
+
+    fn column_exists(conn: &Connection, table: &str, column: &str) -> Result<bool> {
+        let mut stmt = conn.prepare(&format!("PRAGMA table_info({})", table))?;
+        let columns = stmt.query_map([], |row| row.get::<_, String>(1))?;
+        for col in columns {
+            if col? == column {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     /// Record a command execution with token counts and timing.
@@ -373,7 +401,25 @@ impl Tracker {
             ],
         )?;
 
+        self.maybe_cleanup_old()?;
+        Ok(())
+    }
+
+    fn maybe_cleanup_old(&self) -> Result<()> {
+        let mut guard = self
+            .last_cleanup
+            .lock()
+            .map_err(|_| anyhow::anyhow!("tracking cleanup lock poisoned"))?;
+
+        if guard
+            .as_ref()
+            .is_some_and(|last| last.elapsed() < CLEANUP_INTERVAL)
+        {
+            return Ok(());
+        }
+
         self.cleanup_old()?;
+        *guard = Some(Instant::now());
         Ok(())
     }
 
