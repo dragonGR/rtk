@@ -12,6 +12,8 @@ use std::process::{Command, ExitStatus};
 use std::thread;
 use thiserror::Error;
 
+const STREAM_CAPTURE_MAX_BYTES: usize = 16 * 1024 * 1024;
+
 #[derive(Debug, Error)]
 #[error("{message}")]
 pub struct ExitCodeError {
@@ -70,12 +72,28 @@ pub fn run_command_streaming(cmd: &mut Command) -> Result<StreamedOutput> {
             let mut reader = std::io::BufReader::new(stdout);
             let mut out = Vec::new();
             let mut buf = [0u8; 8192];
+            let mut truncated = false;
             loop {
                 let n = reader.read(&mut buf)?;
                 if n == 0 {
                     break;
                 }
-                out.extend_from_slice(&buf[..n]);
+                if !truncated {
+                    let remaining = STREAM_CAPTURE_MAX_BYTES.saturating_sub(out.len());
+                    if remaining == 0 {
+                        truncated = true;
+                    } else if n > remaining {
+                        out.extend_from_slice(&buf[..remaining]);
+                        truncated = true;
+                    } else {
+                        out.extend_from_slice(&buf[..n]);
+                    }
+                }
+            }
+            if truncated {
+                out.extend_from_slice(
+                    b"\n[rtk] stdout truncated after 16777216 bytes to cap memory usage\n",
+                );
             }
             Ok(out)
         })
@@ -86,12 +104,28 @@ pub fn run_command_streaming(cmd: &mut Command) -> Result<StreamedOutput> {
             let mut reader = std::io::BufReader::new(stderr);
             let mut out = Vec::new();
             let mut buf = [0u8; 8192];
+            let mut truncated = false;
             loop {
                 let n = reader.read(&mut buf)?;
                 if n == 0 {
                     break;
                 }
-                out.extend_from_slice(&buf[..n]);
+                if !truncated {
+                    let remaining = STREAM_CAPTURE_MAX_BYTES.saturating_sub(out.len());
+                    if remaining == 0 {
+                        truncated = true;
+                    } else if n > remaining {
+                        out.extend_from_slice(&buf[..remaining]);
+                        truncated = true;
+                    } else {
+                        out.extend_from_slice(&buf[..n]);
+                    }
+                }
+            }
+            if truncated {
+                out.extend_from_slice(
+                    b"\n[rtk] stderr truncated after 16777216 bytes to cap memory usage\n",
+                );
             }
             Ok(out)
         })
