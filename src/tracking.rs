@@ -385,10 +385,12 @@ impl Tracker {
 
         let project_path = current_project_path_string(); // added: record cwd
 
-        self.conn.execute(
-            "INSERT INTO commands (timestamp, original_cmd, rtk_cmd, project_path, input_tokens, output_tokens, saved_tokens, savings_pct, exec_time_ms)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)", // added: project_path
-            params![
+        self.conn
+            .prepare_cached(
+                "INSERT INTO commands (timestamp, original_cmd, rtk_cmd, project_path, input_tokens, output_tokens, saved_tokens, savings_pct, exec_time_ms)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            )?
+            .execute(params![
                 Utc::now().to_rfc3339(),
                 original_cmd,
                 rtk_cmd,
@@ -398,8 +400,7 @@ impl Tracker {
                 saved as i64,
                 pct,
                 exec_time_ms as i64
-            ],
-        )?;
+            ])?;
 
         self.maybe_cleanup_old()?;
         Ok(())
@@ -425,14 +426,12 @@ impl Tracker {
 
     fn cleanup_old(&self) -> Result<()> {
         let cutoff = Utc::now() - chrono::Duration::days(HISTORY_DAYS);
-        self.conn.execute(
-            "DELETE FROM commands WHERE timestamp < ?1",
-            params![cutoff.to_rfc3339()],
-        )?;
-        self.conn.execute(
-            "DELETE FROM parse_failures WHERE timestamp < ?1",
-            params![cutoff.to_rfc3339()],
-        )?;
+        self.conn
+            .prepare_cached("DELETE FROM commands WHERE timestamp < ?1")?
+            .execute(params![cutoff.to_rfc3339()])?;
+        self.conn
+            .prepare_cached("DELETE FROM parse_failures WHERE timestamp < ?1")?
+            .execute(params![cutoff.to_rfc3339()])?;
         Ok(())
     }
 
