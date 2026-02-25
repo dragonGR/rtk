@@ -3,6 +3,7 @@ use anyhow::{Context, Result};
 use regex::Regex;
 use std::collections::HashMap;
 use std::process::{Command, Output};
+use std::sync::OnceLock;
 
 pub fn run(
     pattern: &str,
@@ -39,23 +40,26 @@ pub fn run(
     }
     rg_cmd.arg(&rg_pattern).arg(path);
 
-    let rg_output = rg_cmd.output();
     let mut used_engine = "rg";
-
-    let output = match rg_output {
-        Ok(out) => {
-            let rg_stderr = String::from_utf8_lossy(&out.stderr);
-            if should_fallback_to_grep(out.status.code().unwrap_or(1), &rg_stderr) {
+    let output = if rg_available_cached() {
+        match rg_cmd.output() {
+            Ok(out) => {
+                let rg_stderr = String::from_utf8_lossy(&out.stderr);
+                if should_fallback_to_grep(out.status.code().unwrap_or(1), &rg_stderr) {
+                    used_engine = "grep";
+                    run_grep_fallback(pattern, path, extra_args)?
+                } else {
+                    out
+                }
+            }
+            Err(_) => {
                 used_engine = "grep";
                 run_grep_fallback(pattern, path, extra_args)?
-            } else {
-                out
             }
         }
-        Err(_) => {
-            used_engine = "grep";
-            run_grep_fallback(pattern, path, extra_args)?
-        }
+    } else {
+        used_engine = "grep";
+        run_grep_fallback(pattern, path, extra_args)?
     };
 
     if verbose > 0 {
@@ -237,6 +241,19 @@ fn run_grep_fallback(pattern: &str, path: &str, extra_args: &[String]) -> Result
 
     grep_cmd.arg(pattern).arg(path);
     grep_cmd.output().context("grep fallback failed")
+}
+
+fn rg_available_cached() -> bool {
+    static RG_AVAILABLE: OnceLock<bool> = OnceLock::new();
+    *RG_AVAILABLE.get_or_init(|| {
+        Command::new("rg")
+            .arg("--version")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    })
 }
 
 fn should_fallback_to_grep(exit_code: i32, rg_stderr: &str) -> bool {
