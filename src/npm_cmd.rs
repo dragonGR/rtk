@@ -1,4 +1,5 @@
 use crate::tracking;
+use crate::utils::run_command_streaming;
 use anyhow::{Context, Result};
 use std::process::Command;
 
@@ -20,7 +21,7 @@ pub fn run(args: &[String], verbose: u8, skip_env: bool) -> Result<()> {
         eprintln!("Running: npm run {}", args.join(" "));
     }
 
-    let output = cmd.output().context("Failed to run npm run")?;
+    let output = run_command_streaming(&mut cmd).context("Failed to run npm run")?;
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     let raw = format!("{}\n{}", stdout, stderr);

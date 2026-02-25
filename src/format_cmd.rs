@@ -1,7 +1,7 @@
 use crate::prettier_cmd;
 use crate::ruff_cmd;
 use crate::tracking;
-use crate::utils::{concat_streams, package_manager_exec};
+use crate::utils::{concat_streams, package_manager_exec, run_command_streaming};
 use anyhow::{Context, Result};
 use std::path::Path;
 use std::process::Command;
@@ -110,7 +110,7 @@ pub fn run(args: &[String], verbose: u8) -> Result<()> {
         eprintln!("Running: {} {}", formatter, user_args.join(" "));
     }
 
-    let output = cmd.output().context(format!(
+    let output = run_command_streaming(&mut cmd).context(format!(
         "Failed to run {}. Is it installed? Try: pip install {} (or npm/pnpm for JS formatters)",
         formatter, formatter
     ))?;

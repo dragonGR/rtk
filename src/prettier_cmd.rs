@@ -1,5 +1,5 @@
 use crate::tracking;
-use crate::utils::{concat_streams, package_manager_exec};
+use crate::utils::{concat_streams, package_manager_exec, run_command_streaming};
 use anyhow::{Context, Result};
 use std::path::Path;
 
@@ -17,8 +17,7 @@ pub fn run(args: &[String], verbose: u8) -> Result<()> {
         eprintln!("Running: prettier {}", args.join(" "));
     }
 
-    let output = cmd
-        .output()
+    let output = run_command_streaming(&mut cmd)
         .context("Failed to run prettier (try: npm install -g prettier)")?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);

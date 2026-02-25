@@ -1,6 +1,6 @@
 use crate::json_cmd;
 use crate::tracking;
-use crate::utils::truncate;
+use crate::utils::{run_command_streaming, truncate};
 use anyhow::{Context, Result};
 use std::process::Command;
 
@@ -17,7 +17,7 @@ pub fn run(args: &[String], verbose: u8) -> Result<()> {
         eprintln!("Running: curl -s {}", args.join(" "));
     }
 
-    let output = cmd.output().context("Failed to run curl")?;
+    let output = run_command_streaming(&mut cmd).context("Failed to run curl")?;
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
 
