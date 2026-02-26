@@ -42,11 +42,27 @@ build_release_binary() {
     info "Building optimized release binary from local source..."
     (
         cd "${SOURCE_DIR}"
+        BUILD_BASE_ARGS="build --release"
         if [ -n "${BUILD_JOBS}" ]; then
-            CARGO_BUILD_JOBS="${BUILD_JOBS}" cargo build --release --locked
-        else
-            cargo build --release --locked
+            export CARGO_BUILD_JOBS="${BUILD_JOBS}"
         fi
+
+        # 1) Reproducible when lockfile is already up-to-date.
+        if cargo ${BUILD_BASE_ARGS} --locked; then
+            exit 0
+        fi
+
+        warn "Locked build failed (likely lockfile needs refresh). Retrying offline..."
+
+        # 2) Refresh lockfile without network if possible.
+        if cargo ${BUILD_BASE_ARGS} --offline; then
+            exit 0
+        fi
+
+        warn "Offline build failed (cache may be incomplete). Retrying with normal Cargo resolution..."
+
+        # 3) Final fallback.
+        cargo ${BUILD_BASE_ARGS}
     ) || error "Cargo build failed"
 
     SOURCE_BIN="${SOURCE_DIR}/target/release/${BINARY_NAME}"
@@ -60,8 +76,9 @@ build_release_binary() {
 backup_if_exists() {
     target="$1"
     if [ -e "$target" ]; then
+        [ -w "$target" ] || error "Cannot write to existing binary: $target (check permissions or use RTK_INSTALL_DIR)"
         backup="${target}.bak.$(timestamp)"
-        mv "$target" "$backup"
+        mv "$target" "$backup" || error "Failed to backup existing binary: $target"
         info "Backed up existing $(basename "$target") to $backup"
     fi
 }
@@ -75,8 +92,11 @@ clean_old_installations() {
 
         if [ -w "$old" ] || [ -w "$(dirname "$old")" ]; then
             backup="${old}.old.$(timestamp)"
-            mv "$old" "$backup"
-            info "Archived old installation: $old -> $backup"
+            if mv "$old" "$backup"; then
+                info "Archived old installation: $old -> $backup"
+            else
+                warn "Could not archive old installation (permission/sandbox): $old"
+            fi
         else
             warn "Found old installation but cannot archive (permissions): $old"
         fi
@@ -84,10 +104,11 @@ clean_old_installations() {
 }
 
 install_binary() {
-    mkdir -p "${INSTALL_DIR}"
+    mkdir -p "${INSTALL_DIR}" || error "Cannot create install directory: ${INSTALL_DIR}"
+    [ -w "${INSTALL_DIR}" ] || error "Install directory is not writable: ${INSTALL_DIR} (set RTK_INSTALL_DIR to a writable path)"
     backup_if_exists "${DEST_BIN}"
-    cp "${SOURCE_BIN}" "${DEST_BIN}"
-    chmod +x "${DEST_BIN}"
+    cp "${SOURCE_BIN}" "${DEST_BIN}" || error "Failed to copy binary to ${DEST_BIN}"
+    chmod +x "${DEST_BIN}" || error "Failed to set executable bit on ${DEST_BIN}"
     info "Installed ${BINARY_NAME} to ${DEST_BIN}"
 }
 
