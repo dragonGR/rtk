@@ -1,124 +1,147 @@
-#!/bin/sh
-# rtk installer - https://github.com/rtk-ai/rtk
-# Usage: curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
+#!/usr/bin/env sh
+# rtk installer - local source build only
+# Usage:
+#   ./install.sh
 
-set -e
+set -eu
 
-REPO="rtk-ai/rtk"
 BINARY_NAME="rtk"
 INSTALL_DIR="${RTK_INSTALL_DIR:-$HOME/.local/bin}"
+DEST_BIN="${INSTALL_DIR}/${BINARY_NAME}"
+CLEAN_OLD="${RTK_CLEAN_OLD:-1}"
+AUTO_INIT="${RTK_AUTO_INIT:-0}"
+BUILD_JOBS="${RTK_BUILD_JOBS:-}"
 
-# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-info() {
-    printf "${GREEN}[INFO]${NC} %s\n" "$1"
+info() { printf "${GREEN}[INFO]${NC} %s\n" "$1"; }
+warn() { printf "${YELLOW}[WARN]${NC} %s\n" "$1"; }
+error() { printf "${RED}[ERROR]${NC} %s\n" "$1"; exit 1; }
+
+require_cmd() {
+    command -v "$1" >/dev/null 2>&1 || error "Missing required command: $1"
 }
 
-warn() {
-    printf "${YELLOW}[WARN]${NC} %s\n" "$1"
+timestamp() {
+    date +%Y%m%d-%H%M%S
 }
 
-error() {
-    printf "${RED}[ERROR]${NC} %s\n" "$1"
-    exit 1
+ensure_local_repo() {
+    [ -f "./Cargo.toml" ] || error "Run this script from the rtk repo root (Cargo.toml not found)."
+    grep -q '^name = "rtk"$' "./Cargo.toml" || error "Current Cargo.toml is not the rtk package."
+    SOURCE_DIR="$(pwd)"
 }
 
-# Detect OS
-detect_os() {
-    case "$(uname -s)" in
-        Linux*)  OS="linux";;
-        Darwin*) OS="darwin";;
-        *)       error "Unsupported operating system: $(uname -s)";;
-    esac
-}
+build_release_binary() {
+    require_cmd cargo
+    require_cmd rustc
 
-# Detect architecture
-detect_arch() {
-    case "$(uname -m)" in
-        x86_64|amd64)  ARCH="x86_64";;
-        arm64|aarch64) ARCH="aarch64";;
-        *)             error "Unsupported architecture: $(uname -m)";;
-    esac
-}
+    info "Building optimized release binary from local source..."
+    (
+        cd "${SOURCE_DIR}"
+        if [ -n "${BUILD_JOBS}" ]; then
+            CARGO_BUILD_JOBS="${BUILD_JOBS}" cargo build --release --locked
+        else
+            cargo build --release --locked
+        fi
+    ) || error "Cargo build failed"
 
-# Get latest release version
-get_latest_version() {
-    VERSION=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-    if [ -z "$VERSION" ]; then
-        error "Failed to get latest version"
+    SOURCE_BIN="${SOURCE_DIR}/target/release/${BINARY_NAME}"
+    [ -x "${SOURCE_BIN}" ] || error "Built binary not found at ${SOURCE_BIN}"
+
+    if command -v strip >/dev/null 2>&1; then
+        strip "${SOURCE_BIN}" >/dev/null 2>&1 || true
     fi
 }
 
-# Build target triple
-get_target() {
-    case "$OS" in
-        linux)
-            case "$ARCH" in
-                x86_64)  TARGET="x86_64-unknown-linux-musl";;
-                aarch64) TARGET="aarch64-unknown-linux-gnu";;
-            esac
-            ;;
-        darwin)
-            TARGET="${ARCH}-apple-darwin"
-            ;;
-    esac
-}
-
-# Download and install
-install() {
-    info "Detected: $OS $ARCH"
-    info "Target: $TARGET"
-    info "Version: $VERSION"
-
-    DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/${BINARY_NAME}-${TARGET}.tar.gz"
-    TEMP_DIR=$(mktemp -d)
-    ARCHIVE="${TEMP_DIR}/${BINARY_NAME}.tar.gz"
-
-    info "Downloading from: $DOWNLOAD_URL"
-    if ! curl -fsSL "$DOWNLOAD_URL" -o "$ARCHIVE"; then
-        error "Failed to download binary"
+backup_if_exists() {
+    target="$1"
+    if [ -e "$target" ]; then
+        backup="${target}.bak.$(timestamp)"
+        mv "$target" "$backup"
+        info "Backed up existing $(basename "$target") to $backup"
     fi
-
-    info "Extracting..."
-    tar -xzf "$ARCHIVE" -C "$TEMP_DIR"
-
-    mkdir -p "$INSTALL_DIR"
-    mv "${TEMP_DIR}/${BINARY_NAME}" "${INSTALL_DIR}/"
-
-    chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
-
-    # Cleanup
-    rm -rf "$TEMP_DIR"
-
-    info "Successfully installed ${BINARY_NAME} to ${INSTALL_DIR}/${BINARY_NAME}"
 }
 
-# Verify installation
-verify() {
-    if command -v "$BINARY_NAME" >/dev/null 2>&1; then
-        info "Verification: $($BINARY_NAME --version)"
+clean_old_installations() {
+    [ "${CLEAN_OLD}" = "1" ] || return 0
+
+    for old in "$HOME/.cargo/bin/rtk" "$HOME/.local/bin/rtk" "/usr/local/bin/rtk"; do
+        [ "$old" = "${DEST_BIN}" ] && continue
+        [ -e "$old" ] || continue
+
+        if [ -w "$old" ] || [ -w "$(dirname "$old")" ]; then
+            backup="${old}.old.$(timestamp)"
+            mv "$old" "$backup"
+            info "Archived old installation: $old -> $backup"
+        else
+            warn "Found old installation but cannot archive (permissions): $old"
+        fi
+    done
+}
+
+install_binary() {
+    mkdir -p "${INSTALL_DIR}"
+    backup_if_exists "${DEST_BIN}"
+    cp "${SOURCE_BIN}" "${DEST_BIN}"
+    chmod +x "${DEST_BIN}"
+    info "Installed ${BINARY_NAME} to ${DEST_BIN}"
+}
+
+verify_installation() {
+    VERSION_OUTPUT="$("${DEST_BIN}" --version 2>/dev/null || true)"
+    [ -n "${VERSION_OUTPUT}" ] || error "Installed binary failed to run: ${DEST_BIN}"
+    info "Verification: ${VERSION_OUTPUT}"
+
+    if "${DEST_BIN}" gain --help >/dev/null 2>&1; then
+        info "Verified: 'rtk gain' command is available"
     else
-        warn "Binary installed but not in PATH. Add to your shell profile:"
-        warn "  export PATH=\"\$HOME/.local/bin:\$PATH\""
+        warn "Installed binary works, but 'rtk gain' check failed"
+    fi
+
+    if command -v rtk >/dev/null 2>&1; then
+        ACTIVE_BIN="$(command -v rtk)"
+        if [ "${ACTIVE_BIN}" = "${DEST_BIN}" ]; then
+            info "PATH check: rtk resolves to ${DEST_BIN}"
+        else
+            warn "PATH check: rtk currently resolves to ${ACTIVE_BIN}"
+            warn "Add ${INSTALL_DIR} earlier in PATH to prefer this install."
+        fi
+    else
+        warn "Binary installed but not in PATH."
+        warn "Add this to your shell profile:"
+        warn "  export PATH=\"${INSTALL_DIR}:\$PATH\""
+    fi
+}
+
+maybe_init_claude() {
+    [ "${AUTO_INIT}" = "1" ] || return 0
+
+    if [ -x "${DEST_BIN}" ]; then
+        info "Applying Claude hook setup (rtk init --global --auto-patch)..."
+        "${DEST_BIN}" init --global --auto-patch || warn "Auto init failed. Run manually: rtk init --global --auto-patch"
     fi
 }
 
 main() {
-    info "Installing $BINARY_NAME..."
-
-    detect_os
-    detect_arch
-    get_target
-    get_latest_version
-    install
-    verify
+    info "Installing ${BINARY_NAME} from local source..."
+    ensure_local_repo
+    build_release_binary
+    clean_old_installations
+    install_binary
+    verify_installation
+    maybe_init_claude
 
     echo ""
-    info "Installation complete! Run '$BINARY_NAME --help' to get started."
+    info "Done."
+    if [ "${AUTO_INIT}" = "1" ]; then
+        info "Claude hook setup attempted automatically."
+    else
+        info "Optional next step: RTK_AUTO_INIT=1 ./install.sh  (or run: rtk init --global --auto-patch)"
+    fi
 }
 
 main
