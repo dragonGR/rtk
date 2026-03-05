@@ -1,11 +1,40 @@
 use crate::tracking;
 use crate::utils::{read_text_file_capped, read_text_stdin_capped};
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use serde_json::Value;
 use std::path::Path;
 
+/// Reject non-JSON files with a clear error before doing any I/O.
+fn validate_json_extension(file: &Path) -> Result<()> {
+    if let Some(ext) = file.extension().and_then(|e| e.to_str()) {
+        let format_name = match ext {
+            "toml" => Some("TOML"),
+            "yaml" | "yml" => Some("YAML"),
+            "xml" => Some("XML"),
+            "csv" => Some("CSV"),
+            "ini" => Some("INI"),
+            "env" => Some("env"),
+            "txt" => Some("plain text"),
+            _ => None,
+        };
+        if let Some(fmt) = format_name {
+            let mut msg = format!(
+                "{} is not a JSON file (detected {}). Use `rtk read` for non-JSON files.",
+                file.display(),
+                fmt
+            );
+            if ext == "toml" && file.file_name().is_some_and(|n| n == "Cargo.toml") {
+                msg.push_str(" Tip: use `rtk deps` for Cargo.toml.");
+            }
+            bail!("{}", msg);
+        }
+    }
+    Ok(())
+}
+
 /// Show JSON structure without values
 pub fn run(file: &Path, max_depth: usize, verbose: u8) -> Result<()> {
+    validate_json_extension(file)?;
     let timer = tracking::TimedExecution::start();
 
     if verbose > 0 {
@@ -141,6 +170,42 @@ fn extract_schema(value: &Value, depth: usize, max_depth: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // --- #347: validate_json_extension ---
+
+    #[test]
+    fn test_toml_file_rejected() {
+        let err = validate_json_extension(Path::new("config.toml")).unwrap_err();
+        assert!(err.to_string().contains("not a JSON file"));
+        assert!(err.to_string().contains("TOML"));
+    }
+
+    #[test]
+    fn test_cargo_toml_suggests_deps() {
+        let err = validate_json_extension(Path::new("Cargo.toml")).unwrap_err();
+        assert!(err.to_string().contains("rtk deps"));
+    }
+
+    #[test]
+    fn test_yaml_file_rejected() {
+        let err = validate_json_extension(Path::new("config.yaml")).unwrap_err();
+        assert!(err.to_string().contains("YAML"));
+    }
+
+    #[test]
+    fn test_json_file_accepted() {
+        assert!(validate_json_extension(Path::new("data.json")).is_ok());
+    }
+
+    #[test]
+    fn test_unknown_extension_accepted() {
+        assert!(validate_json_extension(Path::new("data.xyz")).is_ok());
+    }
+
+    #[test]
+    fn test_no_extension_accepted() {
+        assert!(validate_json_extension(Path::new("Makefile")).is_ok());
+    }
 
     #[test]
     fn test_extract_schema_simple() {
