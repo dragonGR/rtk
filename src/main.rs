@@ -21,6 +21,7 @@ mod go_cmd;
 mod golangci_cmd;
 mod grep_cmd;
 mod hook_audit_cmd;
+mod hook_check;
 mod init;
 mod integrity;
 mod json_cmd;
@@ -963,6 +964,9 @@ fn main() {
 fn run() -> Result<()> {
     // Fire-and-forget telemetry ping (1/day, non-blocking)
     telemetry::maybe_ping();
+
+    // Warn if installed hook is outdated (1/day, non-blocking)
+    hook_check::maybe_warn();
 
     let cli = match Cli::try_parse() {
         Ok(cli) => cli,
