@@ -3,7 +3,6 @@ use crate::ruff_cmd;
 use crate::tracking;
 use crate::utils::{concat_streams, package_manager_exec, truncate};
 use anyhow::{Context, Result};
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::process::Command;

@@ -533,6 +533,7 @@ impl Tracker {
     ///     summary.total_saved, summary.avg_savings_pct);
     /// # Ok::<(), anyhow::Error>(())
     /// ```
+    #[allow(dead_code)]
     pub fn get_summary(&self) -> Result<GainSummary> {
         self.get_summary_filtered(None) // delegate to filtered variant
     }
@@ -896,6 +897,7 @@ impl Tracker {
     /// }
     /// # Ok::<(), anyhow::Error>(())
     /// ```
+    #[allow(dead_code)]
     pub fn get_recent(&self, limit: usize) -> Result<Vec<CommandRecord>> {
         self.get_recent_filtered(limit, None) // delegate to filtered variant
     }
@@ -995,6 +997,7 @@ fn get_db_path() -> Result<PathBuf> {
 pub struct ParseFailureRecord {
     pub timestamp: String,
     pub raw_command: String,
+    #[allow(dead_code)]
     pub error_message: String,
     pub fallback_succeeded: bool,
 }
