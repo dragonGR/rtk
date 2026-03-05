@@ -4,27 +4,15 @@ use regex::Regex;
 use std::process::{Command, Stdio};
 
 /// Run a command and filter output to show only errors/warnings
-pub fn run_err(command: &str, verbose: u8) -> Result<()> {
+pub fn run_err(command: &[String], verbose: u8) -> Result<()> {
     let timer = tracking::TimedExecution::start();
+    let command_display = command.join(" ");
 
     if verbose > 0 {
-        eprintln!("Running: {}", command);
+        eprintln!("Running: {}", command_display);
     }
 
-    let output = if cfg!(target_os = "windows") {
-        Command::new("cmd")
-            .args(["/C", command])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-    } else {
-        Command::new("sh")
-            .args(["-c", command])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-    }
-    .context("Failed to execute command")?;
+    let output = execute_direct(command).context("Failed to execute command")?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -58,32 +46,20 @@ pub fn run_err(command: &str, verbose: u8) -> Result<()> {
     } else {
         println!("{}", rtk);
     }
-    timer.track(command, "rtk run-err", &raw, &rtk);
+    timer.track(&command_display, "rtk run-err", &raw, &rtk);
     Ok(())
 }
 
 /// Run tests and show only failures
-pub fn run_test(command: &str, verbose: u8) -> Result<()> {
+pub fn run_test(command: &[String], verbose: u8) -> Result<()> {
     let timer = tracking::TimedExecution::start();
+    let command_display = command.join(" ");
 
     if verbose > 0 {
-        eprintln!("Running tests: {}", command);
+        eprintln!("Running tests: {}", command_display);
     }
 
-    let output = if cfg!(target_os = "windows") {
-        Command::new("cmd")
-            .args(["/C", command])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-    } else {
-        Command::new("sh")
-            .args(["-c", command])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-    }
-    .context("Failed to execute test command")?;
+    let output = execute_direct(command).context("Failed to execute test command")?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -93,14 +69,27 @@ pub fn run_test(command: &str, verbose: u8) -> Result<()> {
         .status
         .code()
         .unwrap_or(if output.status.success() { 0 } else { 1 });
-    let summary = extract_test_summary(&raw, command);
+    let summary = extract_test_summary(&raw, &command_display);
     if let Some(hint) = crate::tee::tee_and_hint(&raw, "test", exit_code) {
         println!("{}\n{}", summary, hint);
     } else {
         println!("{}", summary);
     }
-    timer.track(command, "rtk run-test", &raw, &summary);
+    timer.track(&command_display, "rtk run-test", &raw, &summary);
     Ok(())
+}
+
+fn execute_direct(command: &[String]) -> Result<std::process::Output> {
+    let (program, args) = command
+        .split_first()
+        .ok_or_else(|| anyhow::anyhow!("No command provided"))?;
+
+    Command::new(program)
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .with_context(|| format!("Failed to execute {}", program))
 }
 
 fn filter_errors(output: &str) -> String {
