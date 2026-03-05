@@ -1,9 +1,8 @@
 use crate::tracking;
+use crate::utils::{read_text_file_capped, read_text_stdin_capped};
 use anyhow::Result;
 use regex::Regex;
 use std::collections::HashMap;
-use std::fs;
-use std::io::{self, BufRead};
 use std::path::Path;
 
 /// Filter and deduplicate log output
@@ -14,7 +13,7 @@ pub fn run_file(file: &Path, verbose: u8) -> Result<()> {
         eprintln!("Analyzing log: {}", file.display());
     }
 
-    let content = fs::read_to_string(file)?;
+    let content = read_text_file_capped(file)?;
     let result = analyze_logs(&content);
     println!("{}", result);
     timer.track(
@@ -30,12 +29,7 @@ pub fn run_file(file: &Path, verbose: u8) -> Result<()> {
 pub fn run_stdin(_verbose: u8) -> Result<()> {
     let timer = tracking::TimedExecution::start();
 
-    let mut content = String::new();
-    let stdin = io::stdin();
-    for line in stdin.lock().lines() {
-        content.push_str(&line?);
-        content.push('\n');
-    }
+    let content = read_text_stdin_capped()?;
 
     let result = analyze_logs(&content);
     println!("{}", result);

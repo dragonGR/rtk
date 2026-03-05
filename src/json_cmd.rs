@@ -1,8 +1,7 @@
 use crate::tracking;
+use crate::utils::{read_text_file_capped, read_text_stdin_capped};
 use anyhow::{Context, Result};
 use serde_json::Value;
-use std::fs;
-use std::io::{self, Read};
 use std::path::Path;
 
 /// Show JSON structure without values
@@ -13,7 +12,7 @@ pub fn run(file: &Path, max_depth: usize, verbose: u8) -> Result<()> {
         eprintln!("Analyzing JSON: {}", file.display());
     }
 
-    let content = fs::read_to_string(file)
+    let content = read_text_file_capped(file)
         .with_context(|| format!("Failed to read file: {}", file.display()))?;
 
     let schema = filter_json_string(&content, max_depth)?;
@@ -35,11 +34,7 @@ pub fn run_stdin(max_depth: usize, verbose: u8) -> Result<()> {
         eprintln!("Analyzing JSON from stdin");
     }
 
-    let mut content = String::new();
-    io::stdin()
-        .lock()
-        .read_to_string(&mut content)
-        .context("Failed to read from stdin")?;
+    let content = read_text_stdin_capped().context("Failed to read from stdin")?;
 
     let schema = filter_json_string(&content, max_depth)?;
     println!("{}", schema);

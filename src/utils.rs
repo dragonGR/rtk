@@ -8,6 +8,7 @@
 use anyhow::{Context, Result};
 use regex::Regex;
 use std::collections::HashMap;
+use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
@@ -16,6 +17,7 @@ use std::thread;
 use thiserror::Error;
 
 const STREAM_CAPTURE_MAX_BYTES: usize = 16 * 1024 * 1024;
+pub const TEXT_CAPTURE_MAX_BYTES: usize = 16 * 1024 * 1024;
 
 #[derive(Debug, Error)]
 #[error("{message}")]
@@ -57,6 +59,41 @@ pub struct StreamedOutput {
     pub status: ExitStatus,
     pub stdout: Vec<u8>,
     pub stderr: Vec<u8>,
+}
+
+/// Read UTF-8 text from a file with a hard byte cap to avoid unbounded memory usage.
+pub fn read_text_file_capped(path: &Path) -> Result<String> {
+    let mut file = File::open(path).with_context(|| format!("Failed to read file: {}", path.display()))?;
+    read_text_from_reader_capped(&mut file, "file")
+}
+
+/// Read UTF-8 text from stdin with a hard byte cap to avoid unbounded memory usage.
+pub fn read_text_stdin_capped() -> Result<String> {
+    let stdin = std::io::stdin();
+    let mut locked = stdin.lock();
+    read_text_from_reader_capped(&mut locked, "stdin")
+}
+
+fn read_text_from_reader_capped(reader: &mut impl Read, source: &str) -> Result<String> {
+    let mut bytes = Vec::new();
+    let mut limited = reader.take((TEXT_CAPTURE_MAX_BYTES + 1) as u64);
+    limited
+        .read_to_end(&mut bytes)
+        .with_context(|| format!("Failed to read from {}", source))?;
+
+    let truncated = bytes.len() > TEXT_CAPTURE_MAX_BYTES;
+    if truncated {
+        bytes.truncate(TEXT_CAPTURE_MAX_BYTES);
+    }
+
+    let mut text = String::from_utf8_lossy(&bytes).to_string();
+    if truncated {
+        text.push_str(&format!(
+            "\n[rtk] input truncated after {} bytes to cap memory usage",
+            TEXT_CAPTURE_MAX_BYTES
+        ));
+    }
+    Ok(text)
 }
 
 /// Run a command by streaming stdout/stderr pipes incrementally into memory.
