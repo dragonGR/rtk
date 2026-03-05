@@ -437,6 +437,11 @@ fn rewrite_segment(seg: &str, excluded: &[String]) -> Option<String> {
         return Some(trimmed.to_string());
     }
 
+    // Targeted rewrites that map raw kubectl ergonomics to optimized RTK subcommands.
+    if let Some(rewritten) = rewrite_kubectl_get_shortcuts(trimmed) {
+        return Some(rewritten);
+    }
+
     // Special case: `head -N file` / `head --lines=N file` → `rtk read file --max-lines N`
     // Must intercept before generic prefix replacement, which would produce `rtk read -20 file`.
     // Only intercept when head has a flag (-N, --lines=N, -c, etc.); plain `head file` falls
@@ -480,6 +485,58 @@ fn rewrite_segment(seg: &str, excluded: &[String]) -> Option<String> {
     }
 
     None
+}
+
+/// Rewrite common kubectl get shortcuts to optimized RTK kubectl subcommands.
+///
+/// Supported mappings:
+/// - `kubectl get pods ...` / `kubectl get pod ...` / `kubectl get po ...` -> `rtk kubectl pods ...`
+/// - `kubectl get services ...` / `kubectl get svc ...` -> `rtk kubectl services ...`
+///
+/// Only `-A/--all-namespaces` and `-n/--namespace <ns>` flags are preserved.
+/// Unknown flags return `None` to let generic rewrite logic handle passthrough safely.
+fn rewrite_kubectl_get_shortcuts(cmd: &str) -> Option<String> {
+    if !cmd.starts_with("kubectl get ") {
+        return None;
+    }
+
+    let tokens: Vec<&str> = cmd.split_whitespace().collect();
+    if tokens.len() < 3 {
+        return None;
+    }
+
+    let resource = tokens[2];
+    let target = match resource {
+        "pods" | "pod" | "po" => "pods",
+        "services" | "service" | "svc" => "services",
+        _ => return None,
+    };
+
+    let mut args: Vec<String> = Vec::new();
+    let mut i = 3usize;
+    while i < tokens.len() {
+        match tokens[i] {
+            "-A" | "--all-namespaces" => {
+                args.push("-A".to_string());
+                i += 1;
+            }
+            "-n" | "--namespace" => {
+                if i + 1 >= tokens.len() {
+                    return None;
+                }
+                args.push("-n".to_string());
+                args.push(tokens[i + 1].to_string());
+                i += 2;
+            }
+            _ => return None,
+        }
+    }
+
+    if args.is_empty() {
+        Some(format!("rtk kubectl {}", target))
+    } else {
+        Some(format!("rtk kubectl {} {}", target, args.join(" ")))
+    }
 }
 
 /// Strip a command prefix with word-boundary check.
@@ -1150,6 +1207,46 @@ mod tests {
         assert_eq!(
             rewrite_command("docker run --rm ubuntu bash", &[]),
             Some("rtk docker run --rm ubuntu bash".into())
+        );
+    }
+
+    #[test]
+    fn test_rewrite_docker_compose_ps() {
+        assert_eq!(
+            rewrite_command("docker compose ps", &[]),
+            Some("rtk docker compose ps".into())
+        );
+    }
+
+    #[test]
+    fn test_rewrite_docker_compose_logs_service() {
+        assert_eq!(
+            rewrite_command("docker compose logs api", &[]),
+            Some("rtk docker compose logs api".into())
+        );
+    }
+
+    #[test]
+    fn test_rewrite_kubectl_get_pods_shortcut() {
+        assert_eq!(
+            rewrite_command("kubectl get pods", &[]),
+            Some("rtk kubectl pods".into())
+        );
+    }
+
+    #[test]
+    fn test_rewrite_kubectl_get_svc_namespace() {
+        assert_eq!(
+            rewrite_command("kubectl get svc -n backend", &[]),
+            Some("rtk kubectl services -n backend".into())
+        );
+    }
+
+    #[test]
+    fn test_rewrite_kubectl_get_pods_unknown_flags_fallback_to_generic() {
+        assert_eq!(
+            rewrite_command("kubectl get pods -o wide", &[]),
+            Some("rtk kubectl get pods -o wide".into())
         );
     }
 
