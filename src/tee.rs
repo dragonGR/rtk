@@ -185,6 +185,17 @@ pub fn tee_and_hint(raw: &str, command_slug: &str, exit_code: i32) -> Option<Str
     Some(format_hint(&path))
 }
 
+/// Append tee hint to rendered output when tee capture is written.
+///
+/// Returns the original rendered output unchanged when tee is skipped.
+pub fn append_hint(rendered: &str, raw: &str, command_slug: &str, exit_code: i32) -> String {
+    if let Some(hint) = tee_and_hint(raw, command_slug, exit_code) {
+        format!("{}\n{}", rendered.trim_end(), hint)
+    } else {
+        rendered.to_string()
+    }
+}
+
 /// TeeMode controls when tee writes files.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]

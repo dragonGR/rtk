@@ -40,10 +40,14 @@ pub fn run(args: &[String], verbose: u8) -> Result<()> {
     }
 
     let filtered = filter_next_build(&raw);
+    let exit_code = output
+        .status
+        .code()
+        .unwrap_or(if output.status.success() { 0 } else { 1 });
+    let rendered = crate::tee::append_hint(&filtered, &raw, "next_build", exit_code);
+    println!("{}", rendered);
 
-    println!("{}", filtered);
-
-    timer.track("next build", "rtk next build", &raw, &filtered);
+    timer.track("next build", "rtk next build", &raw, &rendered);
 
     // Preserve exit code for CI/CD
     if !output.status.success() {

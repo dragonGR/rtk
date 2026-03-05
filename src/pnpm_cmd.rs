@@ -305,12 +305,18 @@ fn run_list(depth: usize, args: &[String], verbose: u8) -> Result<()> {
 
     let output = cmd.output().context("Failed to run pnpm list")?;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        anyhow::bail!("pnpm list failed: {}", stderr);
-    }
-
     let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let combined = format!("{}{}", stdout, stderr);
+    if !output.status.success() {
+        let exit_code = output.status.code().unwrap_or(1);
+        let mut msg = format!("pnpm list failed: {}", stderr.trim());
+        if let Some(hint) = crate::tee::tee_and_hint(&combined, "pnpm_list", exit_code) {
+            msg.push('\n');
+            msg.push_str(&hint);
+        }
+        anyhow::bail!(msg);
+    }
 
     // Parse output using PnpmListParser
     let parse_result = PnpmListParser::parse(&stdout);
@@ -340,7 +346,7 @@ fn run_list(depth: usize, args: &[String], verbose: u8) -> Result<()> {
     timer.track(
         &format!("pnpm list --depth={}", depth),
         &format!("rtk pnpm list --depth={}", depth),
-        &stdout,
+        &combined,
         &filtered,
     );
 
@@ -363,6 +369,16 @@ fn run_outdated(args: &[String], verbose: u8) -> Result<()> {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     let combined = format!("{}{}", stdout, stderr);
+
+    if !output.status.success() {
+        let exit_code = output.status.code().unwrap_or(1);
+        let mut msg = format!("pnpm outdated failed: {}", stderr.trim());
+        if let Some(hint) = crate::tee::tee_and_hint(&combined, "pnpm_outdated", exit_code) {
+            msg.push('\n');
+            msg.push_str(&hint);
+        }
+        anyhow::bail!(msg);
+    }
 
     // Parse output using PnpmOutdatedParser
     let parse_result = PnpmOutdatedParser::parse(&stdout);
@@ -429,12 +445,18 @@ fn run_install(packages: &[String], args: &[String], verbose: u8) -> Result<()> 
     let output = cmd.output().context("Failed to run pnpm install")?;
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
+    let combined = format!("{}{}", stdout, stderr);
 
     if !output.status.success() {
-        anyhow::bail!("pnpm install failed: {}", stderr);
+        let exit_code = output.status.code().unwrap_or(1);
+        let mut msg = format!("pnpm install failed: {}", stderr.trim());
+        if let Some(hint) = crate::tee::tee_and_hint(&combined, "pnpm_install", exit_code) {
+            msg.push('\n');
+            msg.push_str(&hint);
+        }
+        anyhow::bail!(msg);
     }
 
-    let combined = format!("{}{}", stdout, stderr);
     let filtered = filter_pnpm_install(&combined);
 
     println!("{}", filtered);
