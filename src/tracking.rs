@@ -33,9 +33,10 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection};
 use serde::Serialize;
+use std::cell::RefCell;
 use std::ffi::OsString;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Mutex, Once};
 use std::time::{Duration, Instant};
 
 // ── Project path helpers ── // added: project-scoped tracking support
@@ -66,6 +67,13 @@ fn project_filter_params(project_path: Option<&str>) -> (Option<String>, Option<
 const HISTORY_DAYS: i64 = 90;
 const SCHEMA_VERSION: i32 = 1;
 const CLEANUP_INTERVAL: Duration = Duration::from_secs(60 * 60);
+const SQLITE_BUSY_TIMEOUT: Duration = Duration::from_secs(5);
+
+thread_local! {
+    static TRACKER_INSTANCE: RefCell<Option<Tracker>> = const { RefCell::new(None) };
+}
+
+static TRACKING_ERROR_ONCE: Once = Once::new();
 
 /// Main tracking interface for recording and querying command history.
 ///
@@ -264,6 +272,10 @@ impl Tracker {
     }
 
     fn initialize_database(conn: &Connection) -> Result<()> {
+        conn.busy_timeout(SQLITE_BUSY_TIMEOUT)?;
+        let _ = conn.pragma_update(None, "journal_mode", "WAL");
+        let _ = conn.pragma_update(None, "synchronous", "NORMAL");
+
         conn.execute(
             "CREATE TABLE IF NOT EXISTS commands (
                 id INTEGER PRIMARY KEY,
@@ -1014,8 +1026,11 @@ pub struct ParseFailureSummary {
 /// Record a parse failure without ever crashing.
 /// Silently ignores all errors — used in the fallback path.
 pub fn record_parse_failure_silent(raw_command: &str, error_message: &str, succeeded: bool) {
-    if let Ok(tracker) = Tracker::new() {
-        let _ = tracker.record_parse_failure(raw_command, error_message, succeeded);
+    if let Err(err) = with_tracker(|tracker| {
+        tracker.record_parse_failure(raw_command, error_message, succeeded)?;
+        Ok(())
+    }) {
+        warn_tracking_error(&err);
     }
 }
 
@@ -1115,14 +1130,17 @@ impl TimedExecution {
         let input_tokens = estimate_tokens(input);
         let output_tokens = estimate_tokens(output);
 
-        if let Ok(tracker) = Tracker::new() {
-            let _ = tracker.record(
+        if let Err(err) = with_tracker(|tracker| {
+            tracker.record(
                 original_cmd,
                 rtk_cmd,
                 input_tokens,
                 output_tokens,
                 elapsed_ms,
-            );
+            )?;
+            Ok(())
+        }) {
+            warn_tracking_error(&err);
         }
     }
 
@@ -1149,8 +1167,11 @@ impl TimedExecution {
     pub fn track_passthrough(&self, original_cmd: &str, rtk_cmd: &str) {
         let elapsed_ms = self.start.elapsed().as_millis() as u64;
         // input_tokens=0, output_tokens=0 won't dilute savings statistics
-        if let Ok(tracker) = Tracker::new() {
-            let _ = tracker.record(original_cmd, rtk_cmd, 0, 0, elapsed_ms);
+        if let Err(err) = with_tracker(|tracker| {
+            tracker.record(original_cmd, rtk_cmd, 0, 0, elapsed_ms)?;
+            Ok(())
+        }) {
+            warn_tracking_error(&err);
         }
     }
 }
@@ -1207,9 +1228,33 @@ pub fn track(original_cmd: &str, rtk_cmd: &str, input: &str, output: &str) {
     let input_tokens = estimate_tokens(input);
     let output_tokens = estimate_tokens(output);
 
-    if let Ok(tracker) = Tracker::new() {
-        let _ = tracker.record(original_cmd, rtk_cmd, input_tokens, output_tokens, 0);
+    if let Err(err) = with_tracker(|tracker| {
+        tracker.record(original_cmd, rtk_cmd, input_tokens, output_tokens, 0)?;
+        Ok(())
+    }) {
+        warn_tracking_error(&err);
     }
+}
+
+fn with_tracker<T>(f: impl FnOnce(&Tracker) -> Result<T>) -> Result<T> {
+    TRACKER_INSTANCE.with(|cell| {
+        if cell.borrow().is_none() {
+            let tracker = Tracker::new()?;
+            *cell.borrow_mut() = Some(tracker);
+        }
+
+        let guard = cell.borrow();
+        let tracker = guard
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("tracker unavailable"))?;
+        f(tracker)
+    })
+}
+
+fn warn_tracking_error(err: &anyhow::Error) {
+    TRACKING_ERROR_ONCE.call_once(|| {
+        eprintln!("[rtk] tracking unavailable: {:#}", err);
+    });
 }
 
 #[cfg(test)]
