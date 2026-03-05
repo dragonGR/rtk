@@ -27,11 +27,12 @@ pub fn run(args: &[String], verbose: u8, skip_env: bool) -> Result<()> {
     let raw = format!("{}\n{}", stdout, stderr);
 
     let filtered = filter_npm_output(&raw);
+    let delta_filtered = crate::delta::apply("npm_run", &filtered);
     let exit_code = output
         .status
         .code()
         .unwrap_or(if output.status.success() { 0 } else { 1 });
-    let rendered = crate::tee::append_hint(&filtered, &raw, "npm_run", exit_code);
+    let rendered = crate::tee::append_hint(&delta_filtered, &raw, "npm_run", exit_code);
     println!("{}", rendered);
 
     timer.track(

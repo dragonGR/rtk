@@ -341,13 +341,14 @@ fn run_list(depth: usize, args: &[String], verbose: u8) -> Result<()> {
         }
     };
 
-    println!("{}", filtered);
+    let rendered = crate::delta::apply("pnpm_list", &filtered);
+    println!("{}", rendered);
 
     timer.track(
         &format!("pnpm list --depth={}", depth),
         &format!("rtk pnpm list --depth={}", depth),
         &combined,
-        &filtered,
+        &rendered,
     );
 
     Ok(())
@@ -403,13 +404,19 @@ fn run_outdated(args: &[String], verbose: u8) -> Result<()> {
         }
     };
 
-    if filtered.trim().is_empty() {
-        println!("All packages up-to-date ✓");
+    let rendered = if filtered.trim().is_empty() {
+        crate::delta::apply("pnpm_outdated", "All packages up-to-date ✓")
     } else {
-        println!("{}", filtered);
+        crate::delta::apply("pnpm_outdated", &filtered)
+    };
+
+    if filtered.trim().is_empty() {
+        println!("{}", rendered);
+    } else {
+        println!("{}", rendered);
     }
 
-    timer.track("pnpm outdated", "rtk pnpm outdated", &combined, &filtered);
+    timer.track("pnpm outdated", "rtk pnpm outdated", &combined, &rendered);
 
     Ok(())
 }
@@ -458,14 +465,14 @@ fn run_install(packages: &[String], args: &[String], verbose: u8) -> Result<()> 
     }
 
     let filtered = filter_pnpm_install(&combined);
-
-    println!("{}", filtered);
+    let rendered = crate::delta::apply("pnpm_install", &filtered);
+    println!("{}", rendered);
 
     timer.track(
         &format!("pnpm install {}", packages.join(" ")),
         &format!("rtk pnpm install {}", packages.join(" ")),
         &combined,
-        &filtered,
+        &rendered,
     );
 
     Ok(())

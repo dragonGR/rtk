@@ -126,12 +126,13 @@ pub fn run(args: &[String], verbose: u8) -> Result<()> {
         "black" => filter_black_output(&raw),
         _ => raw.trim().to_string(),
     };
+    let delta_filtered = crate::delta::apply(&format!("format_{}", formatter), &filtered);
 
     let exit_code = output
         .status
         .code()
         .unwrap_or(if output.status.success() { 0 } else { 1 });
-    let rendered = crate::tee::append_hint(&filtered, &raw, "format", exit_code);
+    let rendered = crate::tee::append_hint(&delta_filtered, &raw, "format", exit_code);
     println!("{}", rendered);
 
     timer.track(

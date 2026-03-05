@@ -25,11 +25,12 @@ pub fn run(args: &[String], verbose: u8) -> Result<()> {
     let raw = concat_streams(&stdout, &stderr, true);
 
     let filtered = filter_prettier_output(&raw, output.status.success());
+    let delta_filtered = crate::delta::apply("prettier", &filtered);
     let exit_code = output
         .status
         .code()
         .unwrap_or(if output.status.success() { 0 } else { 1 });
-    let rendered = crate::tee::append_hint(&filtered, &raw, "prettier", exit_code);
+    let rendered = crate::tee::append_hint(&delta_filtered, &raw, "prettier", exit_code);
     println!("{}", rendered);
 
     timer.track(

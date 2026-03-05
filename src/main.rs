@@ -5,6 +5,7 @@ mod ccusage;
 mod config;
 mod container;
 mod curl_cmd;
+mod delta;
 mod deps;
 mod diff_cmd;
 mod discover;
