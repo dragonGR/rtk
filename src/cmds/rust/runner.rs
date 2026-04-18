@@ -4,7 +4,7 @@ use crate::core::stream::StreamFilter;
 use anyhow::Result;
 use lazy_static::lazy_static;
 use regex::Regex;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 lazy_static! {
     static ref ERROR_PATTERNS: Vec<Regex> = vec![
@@ -98,44 +98,46 @@ impl StreamFilter for ErrorStreamFilter {
     }
 }
 
-fn build_shell_command(command: &str) -> Command {
-    if cfg!(target_os = "windows") {
-        let mut c = Command::new("cmd");
-        c.args(["/C", command]);
-        c
-    } else {
-        let mut c = Command::new("sh");
-        c.args(["-c", command]);
-        c
-    }
+fn build_direct_command(command: &[String]) -> Result<Command> {
+    let (program, args) = command
+        .split_first()
+        .ok_or_else(|| anyhow::anyhow!("No command provided"))?;
+
+    let mut cmd = Command::new(program);
+    cmd.args(args);
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+    Ok(cmd)
 }
 
 /// Run a command and filter output to show only errors/warnings
-pub fn run_err(command: &str, verbose: u8) -> Result<i32> {
+pub fn run_err(command: &[String], verbose: u8) -> Result<i32> {
+    let command_display = command.join(" ");
     if verbose > 0 {
-        eprintln!("Running: {}", command);
+        eprintln!("Running: {}", command_display);
     }
-    let cmd = build_shell_command(command);
+    let cmd = build_direct_command(command)?;
     crate::core::runner::run_streamed(
         cmd,
         "err",
-        command,
+        &command_display,
         Box::new(ErrorStreamFilter::new()),
         crate::core::runner::RunOptions::with_tee("err"),
     )
 }
 
 /// Run tests and show only failures
-pub fn run_test(command: &str, verbose: u8) -> Result<i32> {
+pub fn run_test(command: &[String], verbose: u8) -> Result<i32> {
+    let command_display = command.join(" ");
     if verbose > 0 {
-        eprintln!("Running tests: {}", command);
+        eprintln!("Running tests: {}", command_display);
     }
-    let cmd = build_shell_command(command);
-    let command_owned = command.to_string();
+    let cmd = build_direct_command(command)?;
+    let command_owned = command_display.clone();
     crate::core::runner::run_filtered(
         cmd,
         "test",
-        command,
+        &command_display,
         move |raw| extract_test_summary(raw, &command_owned),
         crate::core::runner::RunOptions::with_tee("test"),
     )
