@@ -60,6 +60,7 @@ fn docker_ps(_verbose: u8) -> Result<i32> {
         "{{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Image}}\t{{.Ports}}",
     ]))
     .context("Failed to run docker ps")?;
+    let raw = result.stdout.clone();
 
     if !result.success() {
         eprint!("{}", result.stderr);
@@ -67,7 +68,6 @@ fn docker_ps(_verbose: u8) -> Result<i32> {
         return Ok(result.exit_code);
     }
 
-    let raw = result.stdout.clone();
     let stdout = result.stdout;
     let mut rtk = String::new();
 
@@ -121,6 +121,7 @@ fn docker_images(_verbose: u8) -> Result<i32> {
         "{{.Repository}}:{{.Tag}}\t{{.Size}}",
     ]))
     .context("Failed to run docker images")?;
+    let raw = result.stdout.clone();
 
     if !result.success() {
         eprint!("{}", result.stderr);
@@ -128,7 +129,6 @@ fn docker_images(_verbose: u8) -> Result<i32> {
         return Ok(result.exit_code);
     }
 
-    let raw = result.stdout.clone();
     let stdout = result.stdout;
     let lines: Vec<&str> = stdout.lines().collect();
     let mut rtk = String::new();
