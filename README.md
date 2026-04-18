@@ -7,8 +7,12 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/rtk-ai/rtk/actions"><img src="https://github.com/rtk-ai/rtk/workflows/Security%20Check/badge.svg" alt="CI"></a>
-  <a href="https://github.com/rtk-ai/rtk/releases"><img src="https://img.shields.io/github/v/release/rtk-ai/rtk" alt="Release"></a>
+  Fork maintained by <strong>dragonGR</strong>, rebased on <code>rtk-ai/rtk</code>
+</p>
+
+<p align="center">
+  <a href="https://github.com/dragonGR/rtk/actions"><img src="https://github.com/dragonGR/rtk/workflows/Security%20Check/badge.svg" alt="CI"></a>
+  <a href="https://github.com/dragonGR/rtk/releases"><img src="https://img.shields.io/github/v/release/dragonGR/rtk" alt="Release"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="https://discord.gg/RySmvNF5kF"><img src="https://img.shields.io/discord/1470188214710046894?label=Discord&logo=discord" alt="Discord"></a>
   <a href="https://formulae.brew.sh/formula/rtk"><img src="https://img.shields.io/homebrew/v/rtk" alt="Homebrew"></a>
@@ -16,6 +20,7 @@
 
 <p align="center">
   <a href="https://www.rtk-ai.app">Website</a> &bull;
+  <a href="https://github.com/dragonGR/rtk">GitHub</a> &bull;
   <a href="#installation">Install</a> &bull;
   <a href="https://www.rtk-ai.app/guide/troubleshooting">Troubleshooting</a> &bull;
   <a href="ARCHITECTURE.md">Architecture</a> &bull;
@@ -104,7 +109,7 @@ Download from [releases](https://github.com/rtk-ai/rtk/releases):
 ### Verify Installation
 
 ```bash
-rtk --version   # Should show "rtk 0.28.2"
+rtk --version   # Upstream builds show "rtk 0.37.0", fork builds may show a dragonGR suffix
 rtk gain        # Should show token savings stats
 ```
 
