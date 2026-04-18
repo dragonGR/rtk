@@ -7,10 +7,12 @@
 
 use anyhow::{Context, Result};
 use regex::Regex;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::{Mutex, OnceLock};
 
 pub const TEXT_CAPTURE_MAX_BYTES: usize = 16 * 1024 * 1024;
 
@@ -406,7 +408,20 @@ pub fn resolved_command(name: &str) -> Command {
 ///
 /// Replaces manual `Command::new("which").arg(tool)` checks that fail on Windows.
 pub fn tool_exists(name: &str) -> bool {
-    which::which(name).is_ok()
+    static CACHE: OnceLock<Mutex<HashMap<String, bool>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+
+    if let Ok(guard) = cache.lock() {
+        if let Some(found) = guard.get(name) {
+            return *found;
+        }
+    }
+
+    let exists = which::which(name).is_ok();
+    if let Ok(mut guard) = cache.lock() {
+        guard.insert(name.to_string(), exists);
+    }
+    exists
 }
 
 /// Extract short name from AWS ARN.

@@ -8,6 +8,8 @@ use anyhow::{Context, Result};
 use regex::Regex;
 use std::collections::HashMap;
 
+const DEFAULT_EXCLUDE_DIRS: [&str; 5] = ["node_modules", "dist", "target", ".next", ".git"];
+
 #[allow(clippy::too_many_arguments)]
 pub fn run(
     pattern: &str,
@@ -25,31 +27,56 @@ pub fn run(
         eprintln!("grep: '{}' in {}", pattern, path);
     }
 
+    let (extra_args, disable_default_excludes) = parse_control_flags(extra_args);
+    let use_default_excludes = !disable_default_excludes
+        && !extra_args.iter().any(|a| {
+            a == "--hidden"
+                || a == "--no-ignore"
+                || a == "--no-ignore-vcs"
+                || a == "-uuu"
+                || a == "-uu"
+        });
+
     // Fix: convert BRE alternation \| → | for rg (which uses PCRE-style regex)
     let rg_pattern = pattern.replace(r"\|", "|");
 
     let mut rg_cmd = resolved_command("rg");
-    rg_cmd.args(["-n", "--no-heading", &rg_pattern, path]);
+    rg_cmd.args(["-n", "--no-heading"]);
 
     if let Some(ft) = file_type {
         rg_cmd.arg("--type").arg(ft);
     }
 
-    for arg in extra_args {
+    if use_default_excludes {
+        for dir in DEFAULT_EXCLUDE_DIRS {
+            rg_cmd.arg("--glob").arg(format!("!{}/**", dir));
+        }
+    }
+
+    for arg in &extra_args {
         // Fix: skip grep-ism -r flag (rg is recursive by default; rg -r means --replace)
         if arg == "-r" || arg == "--recursive" {
             continue;
         }
         rg_cmd.arg(arg);
     }
+    rg_cmd.arg(&rg_pattern).arg(path);
 
-    let result = exec_capture(&mut rg_cmd)
-        .or_else(|_| {
-            let mut grep_cmd = resolved_command("grep");
-            grep_cmd.args(["-rn", pattern, path]);
-            exec_capture(&mut grep_cmd)
-        })
-        .context("grep/rg failed")?;
+    let mut used_engine = "rg";
+    let result = match exec_capture(&mut rg_cmd) {
+        Ok(result) => {
+            if should_fallback_to_grep(result.exit_code, &result.stderr) {
+                used_engine = "grep";
+                run_grep_fallback(pattern, path, &extra_args, use_default_excludes)?
+            } else {
+                result
+            }
+        }
+        Err(_) => {
+            used_engine = "grep";
+            run_grep_fallback(pattern, path, &extra_args, use_default_excludes)?
+        }
+    };
 
     let exit_code = result.exit_code;
     let raw_output = result.stdout.clone();
@@ -65,7 +92,7 @@ pub fn run(
         println!("{}", msg);
         timer.track(
             &format!("grep -rn '{}' {}", pattern, path),
-            "rtk grep",
+            &format!("rtk grep ({})", used_engine),
             &raw_output,
             &msg,
         );
@@ -137,7 +164,7 @@ pub fn run(
     print!("{}", rtk_output);
     timer.track(
         &format!("grep -rn '{}' {}", pattern, path),
-        "rtk grep",
+        &format!("rtk grep ({})", used_engine),
         &raw_output,
         &rtk_output,
     );
@@ -207,6 +234,57 @@ fn compact_path(path: &str) -> String {
         parts[parts.len() - 2],
         parts[parts.len() - 1]
     )
+}
+
+fn run_grep_fallback(
+    pattern: &str,
+    path: &str,
+    extra_args: &[String],
+    use_default_excludes: bool,
+) -> Result<crate::core::stream::CaptureResult> {
+    let mut grep_cmd = resolved_command("grep");
+    grep_cmd.arg("-rn");
+    if use_default_excludes {
+        for dir in DEFAULT_EXCLUDE_DIRS {
+            grep_cmd.arg(format!("--exclude-dir={}", dir));
+        }
+    }
+
+    for arg in extra_args {
+        if arg == "-r" || arg == "--recursive" {
+            continue;
+        }
+        grep_cmd.arg(arg);
+    }
+
+    grep_cmd.arg(pattern).arg(path);
+    exec_capture(&mut grep_cmd).context("grep fallback failed")
+}
+
+fn should_fallback_to_grep(exit_code: i32, rg_stderr: &str) -> bool {
+    if exit_code != 2 {
+        return false;
+    }
+
+    let err = rg_stderr.to_lowercase();
+    err.contains("unrecognized flag")
+        || err.contains("unknown option")
+        || err.contains("unexpected argument")
+        || err.contains("regex parse error")
+        || err.contains("error parsing regex")
+}
+
+fn parse_control_flags(extra_args: &[String]) -> (Vec<String>, bool) {
+    let mut filtered = Vec::with_capacity(extra_args.len());
+    let mut disable_default_excludes = false;
+    for arg in extra_args {
+        if arg == "--no-default-excludes" {
+            disable_default_excludes = true;
+            continue;
+        }
+        filtered.push(arg.clone());
+    }
+    (filtered, disable_default_excludes)
 }
 
 #[cfg(test)]
@@ -309,5 +387,36 @@ mod tests {
             );
         }
         // If rg is not installed, skip gracefully (test still passes)
+    }
+
+    #[test]
+    fn test_should_fallback_to_grep_on_unrecognized_flag() {
+        assert!(should_fallback_to_grep(
+            2,
+            "error: unrecognized flag '--perl-regexp'"
+        ));
+    }
+
+    #[test]
+    fn test_should_fallback_to_grep_on_regex_parse_error() {
+        assert!(should_fallback_to_grep(2, "regex parse error: unclosed group"));
+    }
+
+    #[test]
+    fn test_should_not_fallback_for_no_match_exit() {
+        assert!(!should_fallback_to_grep(1, ""));
+    }
+
+    #[test]
+    fn test_parse_control_flags() {
+        let args = vec![
+            "--no-default-excludes".to_string(),
+            "-i".to_string(),
+            "-A".to_string(),
+            "2".to_string(),
+        ];
+        let (filtered, disabled) = parse_control_flags(&args);
+        assert!(disabled);
+        assert_eq!(filtered, vec!["-i", "-A", "2"]);
     }
 }
