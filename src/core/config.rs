@@ -4,8 +4,9 @@ use super::constants::{CONFIG_TOML, DEFAULT_HISTORY_DAYS, RTK_DATA_DIR};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::sync::OnceLock;
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Config {
     #[serde(default)]
     pub tracking: TrackingConfig,
@@ -23,7 +24,7 @@ pub struct Config {
     pub limits: LimitsConfig,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct HooksConfig {
     /// Commands to exclude from auto-rewrite (e.g. ["curl", "playwright"]).
     /// Survives `rtk init -g` re-runs since config.toml is user-owned.
@@ -31,7 +32,7 @@ pub struct HooksConfig {
     pub exclude_commands: Vec<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrackingConfig {
     pub enabled: bool,
     pub history_days: u32,
@@ -49,7 +50,7 @@ impl Default for TrackingConfig {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DisplayConfig {
     pub colors: bool,
     pub emoji: bool,
@@ -66,7 +67,7 @@ impl Default for DisplayConfig {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FilterConfig {
     pub ignore_dirs: Vec<String>,
     pub ignore_files: Vec<String>,
@@ -88,7 +89,7 @@ impl Default for FilterConfig {
     }
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TelemetryConfig {
     pub enabled: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -97,7 +98,7 @@ pub struct TelemetryConfig {
     pub consent_date: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LimitsConfig {
     /// Max total grep results to show (default: 200)
     pub grep_max_results: usize,
@@ -125,7 +126,10 @@ impl Default for LimitsConfig {
 
 /// Get limits config. Falls back to defaults if config can't be loaded.
 pub fn limits() -> LimitsConfig {
-    Config::load().map(|c| c.limits).unwrap_or_default()
+    static LIMITS_CACHE: OnceLock<LimitsConfig> = OnceLock::new();
+    LIMITS_CACHE
+        .get_or_init(|| Config::load().map(|c| c.limits).unwrap_or_default())
+        .clone()
 }
 
 impl Config {

@@ -36,18 +36,23 @@ use serde::Serialize;
 use std::cell::RefCell;
 use std::ffi::OsString;
 use std::path::PathBuf;
-use std::sync::Once;
+use std::sync::{Once, OnceLock};
 use std::time::{Duration, Instant};
 
 // ── Project path helpers ── // added: project-scoped tracking support
 
 /// Get the canonical project path string for the current working directory.
 fn current_project_path_string() -> String {
-    std::env::current_dir()
-        .ok()
-        .and_then(|p| p.canonicalize().ok())
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_default()
+    static PROJECT_PATH_CACHE: OnceLock<String> = OnceLock::new();
+    PROJECT_PATH_CACHE
+        .get_or_init(|| {
+            std::env::current_dir()
+                .ok()
+                .and_then(|p| p.canonicalize().ok())
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default()
+        })
+        .clone()
 }
 
 /// Build SQL filter params for project-scoped queries.
