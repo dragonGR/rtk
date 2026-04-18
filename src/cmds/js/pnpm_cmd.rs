@@ -314,9 +314,17 @@ fn run_list(depth: usize, args: &[String], verbose: u8) -> Result<i32> {
     }
 
     let result = exec_capture(&mut cmd).context("Failed to run pnpm list")?;
+    let combined = result.combined();
 
     if !result.success() {
-        eprint!("{}", result.stderr);
+        let message = if result.stderr.trim().is_empty() {
+            "pnpm list failed"
+        } else {
+            result.stderr.trim()
+        };
+        let rendered =
+            crate::core::tee::append_hint(message, &combined, "pnpm_list", result.exit_code);
+        eprintln!("{}", rendered);
         return Ok(result.exit_code);
     }
 
@@ -343,13 +351,16 @@ fn run_list(depth: usize, args: &[String], verbose: u8) -> Result<i32> {
         }
     };
 
-    println!("{}", filtered);
+    let delta_filtered = crate::core::delta::apply("pnpm_list", &filtered);
+    let rendered =
+        crate::core::tee::append_hint(&delta_filtered, &combined, "pnpm_list", result.exit_code);
+    println!("{}", rendered);
 
     timer.track(
         &format!("pnpm list --depth={}", depth),
         &format!("rtk pnpm list --depth={}", depth),
-        &result.stdout,
-        &filtered,
+        &combined,
+        &rendered,
     );
 
     Ok(0)
@@ -393,13 +404,25 @@ fn run_outdated(args: &[String], verbose: u8) -> Result<i32> {
         }
     };
 
-    if filtered.trim().is_empty() {
-        println!("All packages up-to-date");
+    let base = if filtered.trim().is_empty() {
+        if result.exit_code != 0 && !result.stderr.trim().is_empty() {
+            result.stderr.trim().to_string()
+        } else {
+            "All packages up-to-date".to_string()
+        }
     } else {
-        println!("{}", filtered);
-    }
+        filtered
+    };
+    let delta_filtered = crate::core::delta::apply("pnpm_outdated", &base);
+    let rendered = crate::core::tee::append_hint(
+        &delta_filtered,
+        &combined,
+        "pnpm_outdated",
+        result.exit_code,
+    );
+    println!("{}", rendered);
 
-    timer.track("pnpm outdated", "rtk pnpm outdated", &combined, &filtered);
+    timer.track("pnpm outdated", "rtk pnpm outdated", &combined, &rendered);
 
     Ok(0)
 }
@@ -433,22 +456,35 @@ fn run_install(packages: &[String], args: &[String], verbose: u8) -> Result<i32>
     }
 
     let result = exec_capture(&mut cmd).context("Failed to run pnpm install")?;
+    let combined = result.combined();
 
     if !result.success() {
-        eprint!("{}", result.stderr);
+        let message = if result.stderr.trim().is_empty() {
+            "pnpm install failed"
+        } else {
+            result.stderr.trim()
+        };
+        let rendered =
+            crate::core::tee::append_hint(message, &combined, "pnpm_install", result.exit_code);
+        eprintln!("{}", rendered);
         return Ok(result.exit_code);
     }
 
-    let combined = result.combined();
     let filtered = filter_pnpm_install(&combined);
-
-    println!("{}", filtered);
+    let delta_filtered = crate::core::delta::apply("pnpm_install", &filtered);
+    let rendered = crate::core::tee::append_hint(
+        &delta_filtered,
+        &combined,
+        "pnpm_install",
+        result.exit_code,
+    );
+    println!("{}", rendered);
 
     timer.track(
         &format!("pnpm install {}", packages.join(" ")),
         &format!("rtk pnpm install {}", packages.join(" ")),
         &combined,
-        &filtered,
+        &rendered,
     );
 
     Ok(0)

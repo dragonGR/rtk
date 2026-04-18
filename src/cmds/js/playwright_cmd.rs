@@ -313,18 +313,17 @@ pub fn run(args: &[String], verbose: u8) -> Result<i32> {
             raw
         }
     };
+    let delta_filtered = crate::core::delta::apply("playwright", &filtered);
+    let rendered =
+        crate::core::tee::append_hint(&delta_filtered, &raw, "playwright", result.exit_code);
 
-    if let Some(hint) = crate::core::tee::tee_and_hint(&raw, "playwright", result.exit_code) {
-        println!("{}\n{}", filtered, hint);
-    } else {
-        println!("{}", filtered);
-    }
+    println!("{}", rendered);
 
     timer.track(
         &format!("playwright {}", args.join(" ")),
         &format!("rtk playwright {}", args.join(" ")),
         &raw,
-        &filtered,
+        &rendered,
     );
 
     // Preserve exit code for CI/CD

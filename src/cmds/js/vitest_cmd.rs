@@ -267,20 +267,21 @@ pub fn run_test(command: &Commands, args: &[String], verbose: u8) -> Result<i32>
             raw
         }
     };
+    let delta_filtered = crate::core::delta::apply(&format!("{}_run", framework), &filtered);
+    let rendered = crate::core::tee::append_hint(
+        &delta_filtered,
+        &combined,
+        format!("{}_run", framework).as_str(),
+        result.exit_code,
+    );
 
-    if let Some(hint) =
-        crate::core::tee::tee_and_hint(&combined, format!("{}_run", framework).as_str(), result.exit_code)
-    {
-        println!("{}\n{}", filtered, hint);
-    } else {
-        println!("{}", filtered);
-    }
+    println!("{}", rendered);
 
     timer.track(
         format!("{} run", framework).as_str(),
         format!("rtk {} run", framework).as_str(),
         &combined,
-        &filtered,
+        &rendered,
     );
 
     if !result.success() {

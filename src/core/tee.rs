@@ -190,6 +190,14 @@ pub fn tee_and_hint(raw: &str, command_slug: &str, exit_code: i32) -> Option<Str
     Some(format_hint(&path))
 }
 
+pub fn append_hint(rendered: &str, raw: &str, command_slug: &str, exit_code: i32) -> String {
+    if let Some(hint) = tee_and_hint(raw, command_slug, exit_code) {
+        format!("{}\n{}", rendered.trim_end(), hint)
+    } else {
+        rendered.to_string()
+    }
+}
+
 /// Force tee output regardless of exit code (used when filters truncate).
 /// Always writes file if size >= MIN_TEE_SIZE and tee is enabled.
 /// Returns hint string if file was written, None if skipped/disabled.

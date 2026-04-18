@@ -32,8 +32,8 @@ pub fn run(args: &[String], verbose: u8) -> Result<i32> {
         cmd,
         "next build",
         &args.join(" "),
-        filter_next_build,
-        runner::RunOptions::default(),
+        |raw| crate::core::delta::apply("next_build", &filter_next_build(raw)),
+        runner::RunOptions::with_tee("next_build"),
     )
 }
 

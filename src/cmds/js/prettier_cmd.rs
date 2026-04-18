@@ -19,8 +19,8 @@ pub fn run(args: &[String], verbose: u8) -> Result<i32> {
         cmd,
         "prettier",
         &args.join(" "),
-        filter_prettier_output,
-        RunOptions::stdout_only(),
+        |raw| crate::core::delta::apply("prettier", &filter_prettier_output(raw)),
+        RunOptions::stdout_only().tee("prettier"),
     )
 }
 

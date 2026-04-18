@@ -2,6 +2,7 @@
 
 pub mod config;
 pub mod constants;
+pub mod delta;
 pub mod display_helpers;
 pub mod filter;
 pub mod runner;

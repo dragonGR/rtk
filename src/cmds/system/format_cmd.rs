@@ -126,14 +126,17 @@ pub fn run(args: &[String], verbose: u8) -> Result<i32> {
         "black" => filter_black_output(&raw),
         _ => raw.trim().to_string(),
     };
+    let delta_filtered = crate::core::delta::apply(&format!("format_{}", formatter), &filtered);
+    let rendered =
+        crate::core::tee::append_hint(&delta_filtered, &raw, "format", result.exit_code);
 
-    println!("{}", filtered);
+    println!("{}", rendered);
 
     timer.track(
         &format!("{} {}", formatter, user_args.join(" ")),
         &format!("rtk format {} {}", formatter, user_args.join(" ")),
         &raw,
-        &filtered,
+        &rendered,
     );
 
     Ok(result.exit_code)

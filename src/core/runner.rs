@@ -6,12 +6,8 @@ use std::process::Command;
 use crate::core::stream::{self, FilterMode, StdinMode, StreamFilter};
 use crate::core::tracking;
 
-pub fn print_with_hint(filtered: &str, raw: &str, tee_label: &str, exit_code: i32) {
-    if let Some(hint) = crate::core::tee::tee_and_hint(raw, tee_label, exit_code) {
-        println!("{}\n{}", filtered, hint);
-    } else {
-        println!("{}", filtered);
-    }
+fn render_with_hint(filtered: &str, raw: &str, tee_label: &str, exit_code: i32) -> String {
+    crate::core::tee::append_hint(filtered, raw, tee_label, exit_code)
 }
 
 #[derive(Default)]
@@ -95,9 +91,14 @@ pub fn run(
                 raw
             };
             let filtered = filter_fn(text_to_filter);
+            let rendered = if let Some(label) = opts.tee_label {
+                render_with_hint(&filtered, raw, label, exit_code)
+            } else {
+                filtered.clone()
+            };
 
-            if let Some(label) = opts.tee_label {
-                print_with_hint(&filtered, raw, label, exit_code);
+            if opts.tee_label.is_some() {
+                println!("{}", rendered);
             } else if opts.no_trailing_newline {
                 print!("{}", filtered);
             } else {
@@ -113,7 +114,7 @@ pub fn run(
                 &cmd_label,
                 &format!("rtk {}", cmd_label),
                 raw_for_tracking,
-                &filtered,
+                &rendered,
             );
             Ok(exit_code)
         }
@@ -122,19 +123,24 @@ pub fn run(
                 stream::run_streaming(&mut cmd, StdinMode::Null, FilterMode::Streaming(filter))
                     .with_context(|| format!("Failed to run {}", tool_name))?;
 
-            if let Some(label) = opts.tee_label {
+            let rendered = if let Some(label) = opts.tee_label {
                 if let Some(hint) =
                     crate::core::tee::tee_and_hint(&result.raw, label, result.exit_code)
                 {
                     println!("{}", hint);
+                    format!("{}\n{}", result.filtered.trim_end(), hint)
+                } else {
+                    result.filtered.clone()
                 }
-            }
+            } else {
+                result.filtered.clone()
+            };
 
             timer.track(
                 &cmd_label,
                 &format!("rtk {}", cmd_label),
                 &result.raw,
-                &result.filtered,
+                &rendered,
             );
             Ok(result.exit_code)
         }

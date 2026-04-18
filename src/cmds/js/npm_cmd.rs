@@ -113,8 +113,8 @@ pub fn run(args: &[String], verbose: u8, skip_env: bool) -> Result<i32> {
         cmd,
         "npm",
         &args.join(" "),
-        filter_npm_output,
-        runner::RunOptions::default(),
+        |raw| crate::core::delta::apply("npm_run", &filter_npm_output(raw)),
+        runner::RunOptions::with_tee("npm_run"),
     )
 }
 
