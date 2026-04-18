@@ -1284,25 +1284,9 @@ fn merge_pnpm_args_os(filters: &[String], args: &[OsString]) -> Vec<OsString> {
 
 /// Validate that pnpm filters are only used in the global context, not before subcommands like tsc.
 fn validate_pnpm_filters(filters: &[String], command: &PnpmCommands) -> Option<String> {
-    // Check if this is a Build or Typecheck command with filters
-    match command {
-        PnpmCommands::Typecheck { .. } => {
-            // FIXME: if filters are present, we should find out which workspaces are selected before running rtk dedicated commands
-            if !filters.is_empty() {
-                let cmd_name = match command {
-                    PnpmCommands::Typecheck { .. } => "tsc",
-                    _ => unreachable!(),
-                };
-                let msg = format!(
-                    "[rtk] warning: --filter is not yet supported for pnpm {}, filters preceding the subcommand will be ignored",
-                    cmd_name
-                );
-                return Some(msg);
-            }
-            None
-        }
-        _ => None,
-    }
+    let _ = filters;
+    let _ = command;
+    None
 }
 
 fn main() {
@@ -1550,7 +1534,13 @@ fn run_cli() -> Result<i32> {
                     &merge_pnpm_args(&filter, &args),
                     cli.verbose,
                 )?,
-                PnpmCommands::Typecheck { args } => tsc_cmd::run(&args, cli.verbose)?,
+                PnpmCommands::Typecheck { args } => {
+                    if filter.is_empty() {
+                        tsc_cmd::run(&args, cli.verbose)?
+                    } else {
+                        tsc_cmd::run_with_pnpm_filters(&filter, &args, cli.verbose)?
+                    }
+                }
                 PnpmCommands::Other(args) => {
                     pnpm_cmd::run_passthrough(&merge_pnpm_args_os(&filter, &args), cli.verbose)?
                 }
@@ -2926,10 +2916,8 @@ mod tests {
         .unwrap();
         match cli.command {
             Commands::Pnpm { filter, command } => {
-                let warning = validate_pnpm_filters(&filter, &command).unwrap();
-
                 assert_eq!(filter, vec!["@app1", "@app2"]);
-                assert_eq!(warning, "[rtk] warning: --filter is not yet supported for pnpm tsc, filters preceding the subcommand will be ignored")
+                assert!(validate_pnpm_filters(&filter, &command).is_none());
             }
             _ => panic!("Expected Pnpm Build command"),
         }

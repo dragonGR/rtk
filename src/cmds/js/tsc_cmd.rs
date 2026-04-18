@@ -43,6 +43,45 @@ pub fn run(args: &[String], verbose: u8) -> Result<i32> {
     )
 }
 
+pub fn run_with_pnpm_filters(filters: &[String], args: &[String], verbose: u8) -> Result<i32> {
+    let mut cmd = resolved_command("pnpm");
+    for filter in filters {
+        cmd.arg("--filter").arg(filter);
+    }
+    cmd.arg("exec").arg("tsc");
+    for arg in args {
+        cmd.arg(arg);
+    }
+
+    if verbose > 0 {
+        eprintln!(
+            "Running: pnpm {} exec tsc {}",
+            filters
+                .iter()
+                .map(|filter| format!("--filter {}", filter))
+                .collect::<Vec<_>>()
+                .join(" "),
+            args.join(" ")
+        );
+    }
+
+    let display_args = filters
+        .iter()
+        .map(|filter| format!("--filter {}", filter))
+        .chain(std::iter::once("exec tsc".to_string()))
+        .chain(args.iter().cloned())
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    runner::run_streamed(
+        cmd,
+        "pnpm",
+        &display_args,
+        Box::new(BlockStreamFilter::new(TscHandler::new())),
+        runner::RunOptions::with_tee("tsc"),
+    )
+}
+
 struct TscHandler {
     error_count: usize,
     files: HashSet<String>,
@@ -253,6 +292,23 @@ src/api.ts(30,5): error TS2322: Type 'null' is not assignable to type 'object'.
         assert!(result.contains("L10:"));
         assert!(result.contains("L20:"));
         assert!(result.contains("L30:"));
+    }
+
+    #[test]
+    fn test_run_with_pnpm_filters_display_args() {
+        let filters = vec!["@app1".to_string(), "@app2".to_string()];
+        let args = vec!["--noEmit".to_string()];
+        let display_args = filters
+            .iter()
+            .map(|filter| format!("--filter {}", filter))
+            .chain(std::iter::once("exec tsc".to_string()))
+            .chain(args.iter().cloned())
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert_eq!(
+            display_args,
+            "--filter @app1 --filter @app2 exec tsc --noEmit"
+        );
     }
 
     #[test]
