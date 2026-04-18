@@ -54,10 +54,6 @@ where
 fn docker_ps(_verbose: u8) -> Result<i32> {
     let timer = tracking::TimedExecution::start();
 
-    let raw = exec_capture(resolved_command("docker").args(["ps"]))
-        .map(|r| r.stdout)
-        .unwrap_or_default();
-
     let result = exec_capture(resolved_command("docker").args([
         "ps",
         "--format",
@@ -71,6 +67,7 @@ fn docker_ps(_verbose: u8) -> Result<i32> {
         return Ok(result.exit_code);
     }
 
+    let raw = result.stdout.clone();
     let stdout = result.stdout;
     let mut rtk = String::new();
 
@@ -118,10 +115,6 @@ fn docker_ps(_verbose: u8) -> Result<i32> {
 fn docker_images(_verbose: u8) -> Result<i32> {
     let timer = tracking::TimedExecution::start();
 
-    let raw = exec_capture(resolved_command("docker").args(["images"]))
-        .map(|r| r.stdout)
-        .unwrap_or_default();
-
     let result = exec_capture(resolved_command("docker").args([
         "images",
         "--format",
@@ -135,6 +128,7 @@ fn docker_images(_verbose: u8) -> Result<i32> {
         return Ok(result.exit_code);
     }
 
+    let raw = result.stdout.clone();
     let stdout = result.stdout;
     let lines: Vec<&str> = stdout.lines().collect();
     let mut rtk = String::new();
@@ -525,18 +519,6 @@ pub fn run_docker_passthrough(args: &[OsString], verbose: u8) -> Result<i32> {
 /// Run `docker compose ps` with compact output
 pub fn run_compose_ps(verbose: u8) -> Result<i32> {
     let timer = tracking::TimedExecution::start();
-
-    // Raw output for token tracking
-    let raw_result = exec_capture(resolved_command("docker").args(["compose", "ps"]))
-        .context("Failed to run docker compose ps")?;
-
-    if !raw_result.success() {
-        eprintln!("{}", raw_result.stderr);
-        return Ok(raw_result.exit_code);
-    }
-    let raw = raw_result.stdout;
-
-    // Structured output for parsing (same pattern as docker_ps)
     let result = exec_capture(resolved_command("docker").args([
         "compose",
         "ps",
@@ -550,6 +532,7 @@ pub fn run_compose_ps(verbose: u8) -> Result<i32> {
         return Ok(result.exit_code);
     }
     let structured = result.stdout;
+    let raw = structured.clone();
 
     if verbose > 0 {
         eprintln!("raw docker compose ps:\n{}", raw);
