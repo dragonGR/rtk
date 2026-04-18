@@ -13,7 +13,10 @@ pub const CLAUDE_HOOK_COMMAND: &str = "rtk hook claude";
 /// Native Rust hook command for Cursor (replaces rtk-rewrite.sh).
 pub const CURSOR_HOOK_COMMAND: &str = "rtk hook cursor";
 
+#[cfg(test)]
 pub const OPENCODE_PLUGIN_PATH: &str = ".config/opencode/plugins/rtk.ts";
+#[cfg(test)]
 pub const CURSOR_DIR: &str = ".cursor";
 pub const CODEX_DIR: &str = ".codex";
+#[cfg(test)]
 pub const GEMINI_DIR: &str = ".gemini";
