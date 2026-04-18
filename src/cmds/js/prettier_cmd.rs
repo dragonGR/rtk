@@ -3,6 +3,7 @@
 use crate::core::runner::{self, RunOptions};
 use crate::core::utils::package_manager_exec;
 use anyhow::Result;
+use std::path::Path;
 
 pub fn run(args: &[String], verbose: u8) -> Result<i32> {
     let mut cmd = package_manager_exec("prettier");
@@ -34,30 +35,42 @@ pub fn filter_prettier_output(output: &str) -> String {
     let mut files_to_format: Vec<String> = Vec::new();
     let mut files_checked = 0;
     let mut is_check_mode = true;
+    let mut saw_success_banner = false;
+    let mut saw_check_failure_banner = false;
 
     for line in output.lines() {
         let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
 
         // Detect check mode vs write mode
         if trimmed.contains("Checking formatting") {
             is_check_mode = true;
         }
 
+        if trimmed.contains("All matched files use Prettier") {
+            saw_success_banner = true;
+        }
+
+        if trimmed.contains("Code style issues found") {
+            saw_check_failure_banner = true;
+        }
+
+        if let Some(rest) = trimmed.strip_prefix("[warn]") {
+            let warn = rest.trim();
+            if is_probable_file_path(warn) {
+                files_to_format.push(warn.to_string());
+            }
+            continue;
+        }
+
         // Count files that need formatting (check mode)
-        if !trimmed.is_empty()
-            && !trimmed.starts_with("Checking")
+        if !trimmed.starts_with("Checking")
             && !trimmed.starts_with("All matched")
             && !trimmed.starts_with("Code style")
-            && !trimmed.contains("[warn]")
             && !trimmed.contains("[error]")
-            && (trimmed.ends_with(".ts")
-                || trimmed.ends_with(".tsx")
-                || trimmed.ends_with(".js")
-                || trimmed.ends_with(".jsx")
-                || trimmed.ends_with(".json")
-                || trimmed.ends_with(".md")
-                || trimmed.ends_with(".css")
-                || trimmed.ends_with(".scss"))
+            && is_probable_file_path(trimmed)
         {
             files_to_format.push(trimmed.to_string());
         }
@@ -72,8 +85,11 @@ pub fn filter_prettier_output(output: &str) -> String {
         }
     }
 
+    files_to_format.sort();
+    files_to_format.dedup();
+
     // Check if all files are formatted
-    if files_to_format.is_empty() && output.contains("All matched files use Prettier") {
+    if files_to_format.is_empty() && saw_success_banner {
         return "Prettier: All files formatted correctly".to_string();
     }
 
@@ -87,7 +103,12 @@ pub fn filter_prettier_output(output: &str) -> String {
     if is_check_mode {
         // Check mode: show files that need formatting
         if files_to_format.is_empty() {
-            result.push_str("Prettier: All files formatted correctly\n");
+            if saw_check_failure_banner {
+                result.push_str("Prettier: formatting issues detected\n");
+                result.push_str("Run `prettier --write` to fix them.\n");
+            } else {
+                result.push_str("Prettier: All files formatted correctly\n");
+            }
         } else {
             result.push_str(&format!(
                 "Prettier: {} files need formatting\n",
@@ -122,6 +143,16 @@ pub fn filter_prettier_output(output: &str) -> String {
     }
 
     result.trim().to_string()
+}
+
+fn is_probable_file_path(candidate: &str) -> bool {
+    let trimmed = candidate.trim();
+    if trimmed.is_empty() || trimmed.contains("Code style issues found") {
+        return false;
+    }
+
+    let path = Path::new(trimmed);
+    path.extension().is_some() || trimmed.contains('/') || trimmed.contains('\\')
 }
 
 #[cfg(test)]
@@ -179,5 +210,28 @@ Code style issues found in the above file(s). Forgot to run Prettier?
         let result = filter_prettier_output("   \n\n  ");
         assert!(result.contains("Error"));
         assert!(!result.contains("All files formatted"));
+    }
+
+    #[test]
+    fn test_filter_warn_prefixed_files() {
+        let output = r#"
+Checking formatting...
+[warn] src/messy.ts
+[warn] Code style issues found in the above file(s). Forgot to run Prettier?
+        "#;
+        let result = filter_prettier_output(output);
+        assert!(result.contains("1 files need formatting"));
+        assert!(result.contains("src/messy.ts"));
+    }
+
+    #[test]
+    fn test_filter_warning_banner_without_paths_is_not_success() {
+        let output = r#"
+Checking formatting...
+[warn] Code style issues found in the above file(s). Forgot to run Prettier?
+        "#;
+        let result = filter_prettier_output(output);
+        assert!(result.contains("formatting issues detected"));
+        assert!(!result.contains("All files formatted correctly"));
     }
 }
