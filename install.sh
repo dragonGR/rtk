@@ -1,18 +1,19 @@
 #!/usr/bin/env sh
-# rtk installer - https://github.com/rtk-ai/rtk
-# Usage: curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
+# Local installer for dragonGR/rtk
+# Usage:
+#   ./install.sh
+#   ./install.sh /path/to/rtk
 
 set -e
 
-REPO="rtk-ai/rtk"
 BINARY_NAME="rtk"
 INSTALL_DIR="${RTK_INSTALL_DIR:-$HOME/.local/bin}"
+REPO_DIR="${1:-$(pwd)}"
 
-# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 info() {
     printf "${GREEN}[INFO]${NC} %s\n" "$1"
@@ -27,98 +28,70 @@ error() {
     exit 1
 }
 
-# Detect OS
-detect_os() {
-    case "$(uname -s)" in
-        Linux*)  OS="linux";;
-        Darwin*) OS="darwin";;
-        *)       error "Unsupported operating system: $(uname -s)";;
-    esac
-}
-
-# Detect architecture
-detect_arch() {
-    case "$(uname -m)" in
-        x86_64|amd64)  ARCH="x86_64";;
-        arm64|aarch64) ARCH="aarch64";;
-        *)             error "Unsupported architecture: $(uname -m)";;
-    esac
-}
-
-# Get latest release version
-get_latest_version() {
-    VERSION=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-    if [ -z "$VERSION" ]; then
-        error "Failed to get latest version"
+require_command() {
+    if ! command -v "$1" >/dev/null 2>&1; then
+        error "Missing required command: $1"
     fi
 }
 
-# Build target triple
-get_target() {
-    case "$OS" in
-        linux)
-            case "$ARCH" in
-                x86_64)  TARGET="x86_64-unknown-linux-musl";;
-                aarch64) TARGET="aarch64-unknown-linux-gnu";;
-            esac
-            ;;
-        darwin)
-            TARGET="${ARCH}-apple-darwin"
-            ;;
-    esac
-}
-
-# Download and install
-install() {
-    info "Detected: $OS $ARCH"
-    info "Target: $TARGET"
-    info "Version: $VERSION"
-
-    DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/${BINARY_NAME}-${TARGET}.tar.gz"
-    TEMP_DIR=$(mktemp -d)
-    ARCHIVE="${TEMP_DIR}/${BINARY_NAME}.tar.gz"
-
-    info "Downloading from: $DOWNLOAD_URL"
-    if ! curl -fsSL "$DOWNLOAD_URL" -o "$ARCHIVE"; then
-        error "Failed to download binary"
+verify_repo() {
+    if [ ! -f "${REPO_DIR}/Cargo.toml" ]; then
+        error "No Cargo.toml found in ${REPO_DIR}"
     fi
 
-    info "Extracting..."
-    tar -xzf "$ARCHIVE" -C "$TEMP_DIR"
+    if [ ! -f "${REPO_DIR}/src/main.rs" ]; then
+        error "No src/main.rs found in ${REPO_DIR}"
+    fi
+}
 
+clean_existing() {
     mkdir -p "$INSTALL_DIR"
-    mv "${TEMP_DIR}/${BINARY_NAME}" "${INSTALL_DIR}/"
 
-    chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
-
-    # Cleanup
-    rm -rf "$TEMP_DIR"
-
-    info "Successfully installed ${BINARY_NAME} to ${INSTALL_DIR}/${BINARY_NAME}"
+    info "Cleaning previous local build artifacts"
+    cargo clean --manifest-path "${REPO_DIR}/Cargo.toml"
 }
 
-# Verify installation
-verify() {
-    if command -v "$BINARY_NAME" >/dev/null 2>&1; then
-        info "Verification: $($BINARY_NAME --version)"
+install_local() {
+    mkdir -p "$INSTALL_DIR"
+
+    info "Installing ${BINARY_NAME} from local checkout: ${REPO_DIR}"
+    info "Install dir: ${INSTALL_DIR}"
+
+    cargo install \
+        --path "$REPO_DIR" \
+        --locked \
+        --force \
+        --root "${INSTALL_DIR%/bin}"
+}
+
+verify_install() {
+    if [ -x "${INSTALL_DIR}/${BINARY_NAME}" ]; then
+        info "Installed binary: ${INSTALL_DIR}/${BINARY_NAME}"
+        info "Version: $("${INSTALL_DIR}/${BINARY_NAME}" --version)"
     else
-        warn "Binary installed but not in PATH. Add to your shell profile:"
-        warn "  export PATH=\"\$HOME/.local/bin:\$PATH\""
+        error "Install finished but ${INSTALL_DIR}/${BINARY_NAME} was not created"
     fi
+
+    case ":$PATH:" in
+        *":${INSTALL_DIR}:"*)
+            ;;
+        *)
+            warn "${INSTALL_DIR} is not on PATH"
+            warn "Add this to your shell profile:"
+            warn "  export PATH=\"${INSTALL_DIR}:\$PATH\""
+            ;;
+    esac
 }
 
 main() {
-    info "Installing $BINARY_NAME..."
-
-    detect_os
-    detect_arch
-    get_target
-    get_latest_version
-    install
-    verify
+    require_command cargo
+    verify_repo
+    clean_existing
+    install_local
+    verify_install
 
     echo ""
-    info "Installation complete! Run '$BINARY_NAME --help' to get started."
+    info "Local installation complete."
 }
 
 main
