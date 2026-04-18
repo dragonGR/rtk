@@ -57,6 +57,18 @@ rtk filters and compresses command outputs before they reach your LLM context. S
 
 ## Installation
 
+### Pre-Install Sanity Check
+
+Before reinstalling, make sure you do not already have the wrong `rtk` on your PATH:
+
+```bash
+rtk --version        # Check whether rtk is already installed
+rtk gain             # Must exist on the Rust Token Killer build
+which rtk            # See which binary will actually run
+```
+
+If `rtk gain` is missing or fails, you likely have the crates.io "Rust Type Kit" package instead of this project.
+
 ### Homebrew (recommended)
 
 ```bash
@@ -97,6 +109,8 @@ rtk gain        # Should show token savings stats
 ```
 
 > **Name collision warning**: Another project named "rtk" (Rust Type Kit) exists on crates.io. If `rtk gain` fails, you have the wrong package. Use `cargo install --git` above instead.
+>
+> After installing, re-run `which rtk` if the shell still resolves to an older binary.
 
 ## Quick Start
 
