@@ -634,6 +634,10 @@ fn rewrite_segment_inner(seg: &str, excluded: &[String], depth: usize) -> Option
         return rewrite_line_range(cmd_part).map(|r| format!("{}{}", r, redirect_suffix));
     }
 
+    if let Some(rewritten) = rewrite_kubectl_get_shortcuts(cmd_part) {
+        return Some(format!("{}{}", rewritten, redirect_suffix));
+    }
+
     // Most cat flags (-v, -A, -e, -t, -s, -b, --show-all, etc.) have different
     // semantics than rtk read or no equivalent at all. Only `-n` (line numbers)
     // maps correctly to `rtk read -n`. Skip rewrite for any other flag.
@@ -713,6 +717,49 @@ fn rewrite_segment_inner(seg: &str, excluded: &[String], depth: usize) -> Option
     }
 
     None
+}
+
+fn rewrite_kubectl_get_shortcuts(cmd: &str) -> Option<String> {
+    if !cmd.starts_with("kubectl get ") {
+        return None;
+    }
+
+    let tokens: Vec<&str> = cmd.split_whitespace().collect();
+    if tokens.len() < 3 {
+        return None;
+    }
+
+    let target = match tokens[2] {
+        "pods" | "pod" | "po" => "pods",
+        "services" | "service" | "svc" => "services",
+        _ => return None,
+    };
+
+    let mut args: Vec<String> = Vec::new();
+    let mut i = 3usize;
+    while i < tokens.len() {
+        match tokens[i] {
+            "-A" | "--all-namespaces" => {
+                args.push("-A".to_string());
+                i += 1;
+            }
+            "-n" | "--namespace" => {
+                if i + 1 >= tokens.len() {
+                    return None;
+                }
+                args.push("-n".to_string());
+                args.push(tokens[i + 1].to_string());
+                i += 2;
+            }
+            _ => return None,
+        }
+    }
+
+    if args.is_empty() {
+        Some(format!("rtk kubectl {}", target))
+    } else {
+        Some(format!("rtk kubectl {} {}", target, args.join(" ")))
+    }
 }
 
 /// Strip a command prefix with word-boundary check.
@@ -1861,6 +1908,30 @@ mod tests {
         assert_eq!(
             rewrite_command("docker compose build", &[]),
             Some("rtk docker compose build".into())
+        );
+    }
+
+    #[test]
+    fn test_rewrite_kubectl_get_pods_shortcut() {
+        assert_eq!(
+            rewrite_command("kubectl get pods", &[]),
+            Some("rtk kubectl pods".into())
+        );
+    }
+
+    #[test]
+    fn test_rewrite_kubectl_get_svc_namespace() {
+        assert_eq!(
+            rewrite_command("kubectl get svc -n backend", &[]),
+            Some("rtk kubectl services -n backend".into())
+        );
+    }
+
+    #[test]
+    fn test_rewrite_kubectl_get_pods_unknown_flags_fallback_to_generic() {
+        assert_eq!(
+            rewrite_command("kubectl get pods -o wide", &[]),
+            Some("rtk kubectl get pods -o wide".into())
         );
     }
 
