@@ -1,8 +1,8 @@
 //! Compares two files and shows only the changed lines.
 
 use crate::core::tracking;
+use crate::core::utils::{read_text_file_capped, read_text_stdin_capped};
 use anyhow::Result;
-use std::fs;
 use std::path::Path;
 
 /// Ultra-condensed diff - only changed lines, no context
@@ -13,8 +13,8 @@ pub fn run(file1: &Path, file2: &Path, verbose: u8) -> Result<()> {
         eprintln!("Comparing: {} vs {}", file1.display(), file2.display());
     }
 
-    let content1 = fs::read_to_string(file1)?;
-    let content2 = fs::read_to_string(file2)?;
+    let content1 = read_text_file_capped(file1)?;
+    let content2 = read_text_file_capped(file2)?;
     let raw = format!("{}\n---\n{}", content1, content2);
 
     let lines1: Vec<&str> = content1.lines().collect();
@@ -64,11 +64,9 @@ pub fn run(file1: &Path, file2: &Path, verbose: u8) -> Result<()> {
 
 /// Run diff from stdin (piped command output)
 pub fn run_stdin(_verbose: u8) -> Result<()> {
-    use std::io::{self, Read};
     let timer = tracking::TimedExecution::start();
 
-    let mut input = String::new();
-    io::stdin().read_to_string(&mut input)?;
+    let input = read_text_stdin_capped()?;
 
     // Parse unified diff format
     let condensed = condense_unified_diff(&input);

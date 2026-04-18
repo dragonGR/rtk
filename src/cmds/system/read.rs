@@ -2,8 +2,8 @@
 
 use crate::core::filter::{self, FilterLevel, Language};
 use crate::core::tracking;
+use crate::core::utils::{read_text_file_capped, read_text_stdin_capped};
 use anyhow::{Context, Result};
-use std::fs;
 use std::path::Path;
 
 pub fn run(
@@ -21,8 +21,7 @@ pub fn run(
     }
 
     // Read file content
-    let content = fs::read_to_string(file)
-        .with_context(|| format!("Failed to read file: {}", file.display()))?;
+    let content = read_text_file_capped(file)?;
 
     // Detect language from extension
     let lang = file
@@ -87,8 +86,6 @@ pub fn run_stdin(
     line_numbers: bool,
     verbose: u8,
 ) -> Result<()> {
-    use std::io::{self, Read as IoRead};
-
     let timer = tracking::TimedExecution::start();
 
     if verbose > 0 {
@@ -96,11 +93,7 @@ pub fn run_stdin(
     }
 
     // Read from stdin
-    let mut content = String::new();
-    io::stdin()
-        .lock()
-        .read_to_string(&mut content)
-        .context("Failed to read from stdin")?;
+    let content = read_text_stdin_capped().context("Failed to read from stdin")?;
 
     // No file extension, so use Unknown language
     let lang = Language::Unknown;

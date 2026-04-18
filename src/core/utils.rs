@@ -7,8 +7,12 @@
 
 use anyhow::{Context, Result};
 use regex::Regex;
-use std::path::PathBuf;
+use std::fs::File;
+use std::io::Read;
+use std::path::{Path, PathBuf};
 use std::process::Command;
+
+pub const TEXT_CAPTURE_MAX_BYTES: usize = 16 * 1024 * 1024;
 
 /// Truncates a string to `max_len` characters, appending `...` if needed.
 ///
@@ -150,6 +154,43 @@ pub fn join_with_overflow(items: &[String], total: usize, max: usize, label: &st
         out.push_str(&format!("\n... +{} more {}", total - max, label));
     }
     out
+}
+
+/// Read UTF-8 text from a file with a hard byte cap to avoid unbounded memory use.
+pub fn read_text_file_capped(path: &Path) -> Result<String> {
+    let mut file =
+        File::open(path).with_context(|| format!("Failed to read file: {}", path.display()))?;
+    read_text_from_reader_capped(&mut file, "file")
+}
+
+/// Read UTF-8 text from stdin with a hard byte cap to avoid unbounded memory use.
+pub fn read_text_stdin_capped() -> Result<String> {
+    let stdin = std::io::stdin();
+    let mut locked = stdin.lock();
+    read_text_from_reader_capped(&mut locked, "stdin")
+}
+
+fn read_text_from_reader_capped(reader: &mut impl Read, source: &str) -> Result<String> {
+    let mut bytes = Vec::new();
+    let mut limited = reader.take((TEXT_CAPTURE_MAX_BYTES + 1) as u64);
+    limited
+        .read_to_end(&mut bytes)
+        .with_context(|| format!("Failed to read from {}", source))?;
+
+    let truncated = bytes.len() > TEXT_CAPTURE_MAX_BYTES;
+    if truncated {
+        bytes.truncate(TEXT_CAPTURE_MAX_BYTES);
+    }
+
+    let mut text = String::from_utf8_lossy(&bytes).to_string();
+    if truncated {
+        text.push_str(&format!(
+            "\n[rtk] input truncated after {} bytes to cap memory usage",
+            TEXT_CAPTURE_MAX_BYTES
+        ));
+    }
+
+    Ok(text)
 }
 
 /// Truncate an ISO 8601 datetime string to just the date portion (first 10 chars).
