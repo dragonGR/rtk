@@ -6,9 +6,15 @@ use crate::core::tracking;
 use crate::core::utils::resolved_command;
 use anyhow::{Context, Result};
 use regex::Regex;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 const DEFAULT_EXCLUDE_DIRS: [&str; 5] = ["node_modules", "dist", "target", ".next", ".git"];
+
+#[derive(Default)]
+struct FileMatches {
+    total_matches: usize,
+    displayed_matches: Vec<(usize, String)>,
+}
 
 #[allow(clippy::too_many_arguments)]
 pub fn run(
@@ -22,6 +28,10 @@ pub fn run(
     verbose: u8,
 ) -> Result<i32> {
     let timer = tracking::TimedExecution::start();
+    let limits = config::limits();
+    let per_file = limits.grep_max_per_file.max(1);
+    let max_results = max_results.min(limits.grep_max_results).max(1);
+    let max_tracked_files = max_results;
 
     if verbose > 0 {
         eprintln!("grep: '{}' in {}", pattern, path);
@@ -99,8 +109,11 @@ pub fn run(
         return Ok(exit_code);
     }
 
-    let mut by_file: HashMap<String, Vec<(usize, String)>> = HashMap::new();
+    let mut by_file: HashMap<String, FileMatches> = HashMap::new();
+    let mut hidden_files = HashSet::new();
     let mut total = 0;
+    let mut displayed = 0;
+    let mut truncated_scan = false;
 
     // Compile context regex once (instead of per-line in clean_line)
     let context_re = if context_only {
@@ -124,11 +137,32 @@ pub fn run(
 
         total += 1;
         let cleaned = clean_line(content, max_line_len, context_re.as_ref(), pattern);
-        by_file.entry(file).or_default().push((line_num, cleaned));
+        if !record_match(
+            &mut by_file,
+            &mut hidden_files,
+            file,
+            line_num,
+            cleaned,
+            per_file,
+            max_results,
+            max_tracked_files,
+            &mut displayed,
+        ) {
+            truncated_scan = true;
+            break;
+        }
     }
 
     let mut rtk_output = String::new();
-    rtk_output.push_str(&format!("{} matches in {}F:\n\n", total, by_file.len()));
+    let total_files = by_file.len() + hidden_files.len();
+    if truncated_scan {
+        rtk_output.push_str(&format!(
+            "{}+ matches in {}+F (scan truncated):\n\n",
+            total, total_files
+        ));
+    } else {
+        rtk_output.push_str(&format!("{} matches in {}F:\n\n", total, total_files));
+    }
 
     let mut shown = 0;
     let mut files: Vec<_> = by_file.iter().collect();
@@ -140,10 +174,12 @@ pub fn run(
         }
 
         let file_display = compact_path(file);
-        rtk_output.push_str(&format!("[file] {} ({}):\n", file_display, matches.len()));
+        rtk_output.push_str(&format!(
+            "[file] {} ({}):\n",
+            file_display, matches.total_matches
+        ));
 
-        let per_file = config::limits().grep_max_per_file;
-        for (line_num, content) in matches.iter().take(per_file) {
+        for (line_num, content) in &matches.displayed_matches {
             rtk_output.push_str(&format!("  {:>4}: {}\n", line_num, content));
             shown += 1;
             if shown >= max_results {
@@ -151,12 +187,21 @@ pub fn run(
             }
         }
 
-        if matches.len() > per_file {
-            rtk_output.push_str(&format!("  +{}\n", matches.len() - per_file));
+        if matches.total_matches > matches.displayed_matches.len() {
+            rtk_output.push_str(&format!(
+                "  +{}\n",
+                matches.total_matches - matches.displayed_matches.len()
+            ));
         }
         rtk_output.push('\n');
     }
 
+    if !hidden_files.is_empty() {
+        rtk_output.push_str(&format!(
+            "... +{} more files beyond the output budget\n",
+            hidden_files.len()
+        ));
+    }
     if total > shown {
         rtk_output.push_str(&format!("... +{}\n", total - shown));
     }
@@ -170,6 +215,49 @@ pub fn run(
     );
 
     Ok(exit_code)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn record_match(
+    by_file: &mut HashMap<String, FileMatches>,
+    hidden_files: &mut HashSet<String>,
+    file: String,
+    line_num: usize,
+    cleaned: String,
+    per_file: usize,
+    max_results: usize,
+    max_tracked_files: usize,
+    displayed: &mut usize,
+) -> bool {
+    if let Some(entry) = by_file.get_mut(&file) {
+        entry.total_matches += 1;
+        if entry.displayed_matches.len() < per_file && *displayed < max_results {
+            entry.displayed_matches.push((line_num, cleaned));
+            *displayed += 1;
+        }
+        return true;
+    }
+
+    if by_file.len() >= max_tracked_files && *displayed >= max_results {
+        hidden_files.insert(file);
+        return false;
+    }
+
+    if by_file.len() >= max_tracked_files {
+        hidden_files.insert(file);
+        return true;
+    }
+
+    let mut entry = FileMatches {
+        total_matches: 1,
+        displayed_matches: Vec::new(),
+    };
+    if *displayed < max_results {
+        entry.displayed_matches.push((line_num, cleaned));
+        *displayed += 1;
+    }
+    by_file.insert(file, entry);
+    true
 }
 
 fn clean_line(line: &str, max_len: usize, context_re: Option<&Regex>, pattern: &str) -> String {
@@ -418,5 +506,37 @@ mod tests {
         let (filtered, disabled) = parse_control_flags(&args);
         assert!(disabled);
         assert_eq!(filtered, vec!["-i", "-A", "2"]);
+    }
+
+    #[test]
+    fn test_record_match_caps_tracked_files_after_budget() {
+        let mut by_file = HashMap::new();
+        let mut hidden_files = HashSet::new();
+        let mut displayed = 0;
+
+        assert!(record_match(
+            &mut by_file,
+            &mut hidden_files,
+            "src/a.rs".to_string(),
+            1,
+            "alpha".to_string(),
+            2,
+            1,
+            1,
+            &mut displayed,
+        ));
+        assert!(!record_match(
+            &mut by_file,
+            &mut hidden_files,
+            "src/b.rs".to_string(),
+            2,
+            "beta".to_string(),
+            2,
+            1,
+            1,
+            &mut displayed,
+        ));
+        assert_eq!(by_file.len(), 1);
+        assert!(hidden_files.contains("src/b.rs"));
     }
 }
