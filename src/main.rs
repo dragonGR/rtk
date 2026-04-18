@@ -1882,7 +1882,7 @@ mod tests {
     }
 
     #[test]
-    fn test_pnpm_typecheck_without_filters() {
+    fn test_pnpm_typecheck_warns_on_misplaced_subcommand_filters() {
         let cli = Cli::try_parse_from([
             "rtk",
             "pnpm",
@@ -1898,14 +1898,14 @@ mod tests {
                 let warning = validate_pnpm_filters(&filter, &command);
 
                 assert!(filter.is_empty());
-                assert!(warning.is_none())
+                assert!(warning.is_some());
             }
             _ => panic!("Expected Pnpm Build command"),
         }
     }
 
     #[test]
-    fn test_pnpm_typecheck_with_filters() {
+    fn test_pnpm_typecheck_warns_when_global_and_subcommand_filters_mix() {
         let cli = Cli::try_parse_from([
             "rtk",
             "pnpm",
@@ -1918,6 +1918,28 @@ mod tests {
             "@app3",
             "--filter",
             "@app4",
+        ])
+        .unwrap();
+        match cli.command {
+            Commands::Pnpm { filter, command } => {
+                assert_eq!(filter, vec!["@app1", "@app2"]);
+                assert!(validate_pnpm_filters(&filter, &command).is_some());
+            }
+            _ => panic!("Expected Pnpm Build command"),
+        }
+    }
+
+    #[test]
+    fn test_pnpm_typecheck_accepts_global_filters_only() {
+        let cli = Cli::try_parse_from([
+            "rtk",
+            "pnpm",
+            "--filter",
+            "@app1",
+            "--filter",
+            "@app2",
+            "typecheck",
+            "--noEmit",
         ])
         .unwrap();
         match cli.command {

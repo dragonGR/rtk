@@ -49,8 +49,22 @@ pub(crate) fn merge_pnpm_args_os(filters: &[String], args: &[OsString]) -> Vec<O
 
 pub(crate) fn validate_pnpm_filters(filters: &[String], command: &PnpmCommands) -> Option<String> {
     let _ = filters;
-    let _ = command;
-    None
+
+    let PnpmCommands::Typecheck { args } = command else {
+        return None;
+    };
+
+    let has_misplaced_filter = args.iter().any(|arg| {
+        arg == "--filter" || arg == "-F" || arg.starts_with("--filter=") || arg.starts_with("-F=")
+    });
+
+    if has_misplaced_filter {
+        Some(
+            "warning: `pnpm typecheck` only accepts workspace filters before the subcommand. Use `rtk pnpm --filter <pkg> typecheck ...`; trailing `--filter` arguments are passed to `tsc` instead of pnpm.".to_string(),
+        )
+    } else {
+        None
+    }
 }
 
 pub(crate) fn run_command(cli: Cli) -> Result<i32> {
