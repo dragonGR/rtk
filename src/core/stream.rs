@@ -91,6 +91,7 @@ pub struct RegexBlockFilter {
 }
 
 impl RegexBlockFilter {
+    #[allow(dead_code)] // public helper for command modules; currently exercised in tests/docs
     pub fn new(tool_name: &str, start_pattern: &str) -> Self {
         Self {
             start_re: Regex::new(start_pattern).unwrap_or_else(|e| {
@@ -175,6 +176,7 @@ impl<F: FnMut(&str) -> Option<String>> StreamFilter for LineFilter<F> {
 
 pub enum FilterMode<'a> {
     Streaming(Box<dyn StreamFilter + 'a>),
+    #[allow(dead_code)] // buffered mode is covered in tests and kept for future command adapters
     Buffered(Box<dyn Fn(&str) -> String + 'a>),
     CaptureOnly,
     Passthrough,
