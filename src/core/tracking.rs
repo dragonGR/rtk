@@ -36,7 +36,7 @@ use serde::Serialize;
 use std::cell::RefCell;
 use std::ffi::OsString;
 use std::path::PathBuf;
-use std::sync::{Once, OnceLock};
+use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 // ── Project path helpers ── // added: project-scoped tracking support
@@ -70,12 +70,15 @@ fn project_filter_params(project_path: Option<&str>) -> (Option<String>, Option<
 
 use super::constants::{DEFAULT_HISTORY_DAYS, HISTORY_DB, RTK_DATA_DIR};
 
-thread_local! {
-    static TRACKER_INSTANCE: RefCell<Option<Tracker>> = const { RefCell::new(None) };
-    static LAST_CLEANUP: RefCell<Option<Instant>> = const { RefCell::new(None) };
+enum TrackerInstance {
+    Enabled(Tracker),
+    Disabled,
 }
 
-static TRACKING_ERROR_ONCE: Once = Once::new();
+thread_local! {
+    static TRACKER_INSTANCE: RefCell<Option<TrackerInstance>> = const { RefCell::new(None) };
+    static LAST_CLEANUP: RefCell<Option<Instant>> = const { RefCell::new(None) };
+}
 const CLEANUP_INTERVAL: Duration = Duration::from_secs(60 * 60);
 
 /// Main tracking interface for recording and querying command history.
@@ -1224,12 +1227,10 @@ pub struct ParseFailureSummary {
 /// Record a parse failure without ever crashing.
 /// Silently ignores all errors — used in the fallback path.
 pub fn record_parse_failure_silent(raw_command: &str, error_message: &str, succeeded: bool) {
-    if let Err(err) = with_tracker(|tracker| {
+    let _ = with_tracker(|tracker| {
         tracker.record_parse_failure(raw_command, error_message, succeeded)?;
         Ok(())
-    }) {
-        warn_tracking_error(&err);
-    }
+    });
 }
 
 /// Estimate token count from text using ~4 chars = 1 token heuristic.
@@ -1328,7 +1329,7 @@ impl TimedExecution {
         let input_tokens = estimate_tokens(input);
         let output_tokens = estimate_tokens(output);
 
-        if let Err(err) = with_tracker(|tracker| {
+        let _ = with_tracker(|tracker| {
             tracker.record(
                 original_cmd,
                 rtk_cmd,
@@ -1337,9 +1338,7 @@ impl TimedExecution {
                 elapsed_ms,
             )?;
             Ok(())
-        }) {
-            warn_tracking_error(&err);
-        }
+        });
     }
 
     /// Track passthrough commands (timing-only, no token counting).
@@ -1365,33 +1364,30 @@ impl TimedExecution {
     pub fn track_passthrough(&self, original_cmd: &str, rtk_cmd: &str) {
         let elapsed_ms = self.start.elapsed().as_millis() as u64;
         // input_tokens=0, output_tokens=0 won't dilute savings statistics
-        if let Err(err) = with_tracker(|tracker| {
+        let _ = with_tracker(|tracker| {
             tracker.record(original_cmd, rtk_cmd, 0, 0, elapsed_ms)?;
             Ok(())
-        }) {
-            warn_tracking_error(&err);
-        }
+        });
     }
 }
 
 fn with_tracker<T>(f: impl FnOnce(&Tracker) -> Result<T>) -> Result<T> {
     TRACKER_INSTANCE.with(|cell| {
         if cell.borrow().is_none() {
-            *cell.borrow_mut() = Some(Tracker::new()?);
+            let instance = match Tracker::new() {
+                Ok(tracker) => TrackerInstance::Enabled(tracker),
+                Err(_) => TrackerInstance::Disabled,
+            };
+            *cell.borrow_mut() = Some(instance);
         }
 
         let guard = cell.borrow();
-        let tracker = guard
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("tracker unavailable"))?;
-        f(tracker)
+        match guard.as_ref() {
+            Some(TrackerInstance::Enabled(tracker)) => f(tracker),
+            Some(TrackerInstance::Disabled) => Err(anyhow::anyhow!("tracker disabled")),
+            None => anyhow::bail!("tracker unavailable"),
+        }
     })
-}
-
-fn warn_tracking_error(err: &anyhow::Error) {
-    TRACKING_ERROR_ONCE.call_once(|| {
-        eprintln!("[rtk] tracking unavailable: {:#}", err);
-    });
 }
 
 /// Format OsString args for tracking display.
