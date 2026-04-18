@@ -23,12 +23,7 @@ pub fn run(
     // Read file content
     let content = read_text_file_capped(file)?;
 
-    // Detect language from extension
-    let lang = file
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(Language::from_extension)
-        .unwrap_or(Language::Unknown);
+    let lang = detect_language(Some(file), &content);
 
     if verbose > 1 {
         eprintln!("Detected language: {:?}", lang);
@@ -95,8 +90,7 @@ pub fn run_stdin(
     // Read from stdin
     let content = read_text_stdin_capped().context("Failed to read from stdin")?;
 
-    // No file extension, so use Unknown language
-    let lang = Language::Unknown;
+    let lang = detect_language(None, &content);
 
     if verbose > 1 {
         eprintln!("Language: {:?} (stdin has no extension)", lang);
@@ -141,6 +135,55 @@ fn format_with_line_numbers(content: &str) -> String {
         out.push_str(&format!("{:>width$} │ {}\n", i + 1, line, width = width));
     }
     out
+}
+
+fn detect_language(path: Option<&Path>, content: &str) -> Language {
+    if let Some(path) = path {
+        if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+            let by_extension = Language::from_extension(ext);
+            if by_extension != Language::Unknown {
+                return by_extension;
+            }
+        }
+
+        if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+            let lower = name.to_ascii_lowercase();
+            match lower.as_str() {
+                "dockerfile" | "containerfile" | "makefile" | "justfile" => {
+                    return Language::Shell;
+                }
+                "gemfile" | "rakefile" => return Language::Ruby,
+                _ => {}
+            }
+        }
+    }
+
+    detect_language_from_shebang(content).unwrap_or(Language::Unknown)
+}
+
+fn detect_language_from_shebang(content: &str) -> Option<Language> {
+    let first_line = content.lines().next()?.trim();
+    if !first_line.starts_with("#!") {
+        return None;
+    }
+
+    if first_line.contains("python") {
+        Some(Language::Python)
+    } else if first_line.contains("node")
+        || first_line.contains("deno")
+        || first_line.contains("bun")
+    {
+        Some(Language::JavaScript)
+    } else if first_line.contains("ruby") {
+        Some(Language::Ruby)
+    } else if first_line.contains("bash")
+        || first_line.contains("zsh")
+        || first_line.contains("/sh")
+    {
+        Some(Language::Shell)
+    } else {
+        None
+    }
 }
 
 fn apply_line_window(
@@ -218,6 +261,30 @@ fn main() {{
         let output = apply_line_window(input, Some(2), None, &Language::Unknown);
         assert!(output.starts_with("a\n"));
         assert!(output.contains("more lines"));
+    }
+
+    #[test]
+    fn test_detect_language_from_special_filename() {
+        assert_eq!(
+            detect_language(Some(Path::new("Dockerfile")), "# comment\nRUN echo hi\n"),
+            Language::Shell
+        );
+        assert_eq!(
+            detect_language(Some(Path::new("Makefile")), "# comment\nall:\n\tcargo test\n"),
+            Language::Shell
+        );
+    }
+
+    #[test]
+    fn test_detect_language_from_shebang() {
+        assert_eq!(
+            detect_language(None, "#!/usr/bin/env python3\nprint('hi')\n"),
+            Language::Python
+        );
+        assert_eq!(
+            detect_language(None, "#!/bin/bash\necho hi\n"),
+            Language::Shell
+        );
     }
 
     fn rtk_bin() -> std::path::PathBuf {
