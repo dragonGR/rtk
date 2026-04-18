@@ -37,7 +37,7 @@ use std::cell::RefCell;
 use std::ffi::OsString;
 use std::path::PathBuf;
 use std::sync::Once;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 // ── Project path helpers ── // added: project-scoped tracking support
 
@@ -67,9 +67,11 @@ use super::constants::{DEFAULT_HISTORY_DAYS, HISTORY_DB, RTK_DATA_DIR};
 
 thread_local! {
     static TRACKER_INSTANCE: RefCell<Option<Tracker>> = const { RefCell::new(None) };
+    static LAST_CLEANUP: RefCell<Option<Instant>> = const { RefCell::new(None) };
 }
 
 static TRACKING_ERROR_ONCE: Once = Once::new();
+const CLEANUP_INTERVAL: Duration = Duration::from_secs(60 * 60);
 
 /// Main tracking interface for recording and querying command history.
 ///
@@ -389,7 +391,7 @@ impl Tracker {
             ],
         )?;
 
-        self.cleanup_old()?;
+        self.maybe_cleanup_old()?;
         Ok(())
     }
 
@@ -404,6 +406,22 @@ impl Tracker {
             params![cutoff.to_rfc3339()],
         )?;
         Ok(())
+    }
+
+    fn maybe_cleanup_old(&self) -> Result<()> {
+        LAST_CLEANUP.with(|last_cleanup| {
+            let now = Instant::now();
+            let should_cleanup = last_cleanup
+                .borrow()
+                .is_none_or(|last| now.duration_since(last) >= CLEANUP_INTERVAL);
+
+            if should_cleanup {
+                self.cleanup_old()?;
+                *last_cleanup.borrow_mut() = Some(now);
+            }
+
+            Ok(())
+        })
     }
 
     /// Record a parse failure for analytics.
@@ -423,7 +441,7 @@ impl Tracker {
                 fallback_succeeded as i32,
             ],
         )?;
-        self.cleanup_old()?;
+        self.maybe_cleanup_old()?;
         Ok(())
     }
 
