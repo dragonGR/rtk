@@ -92,7 +92,10 @@ pub fn apply(command_key: &str, current: &str) -> String {
             out.push_str(&format!("+ {}\n", line));
         }
         if added.len() > MAX_ADDED_LINES {
-            out.push_str(&format!("... +{} more added lines\n", added.len() - MAX_ADDED_LINES));
+            out.push_str(&format!(
+                "... +{} more added lines\n",
+                added.len() - MAX_ADDED_LINES
+            ));
         }
     }
 
