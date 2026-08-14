@@ -15,12 +15,40 @@ import { isToolCallEventType } from "@earendil-works/pi-coding-agent"
 
 const REWRITE_TIMEOUT_MS = 2_000
 const MIN_SUPPORTED_RTK_MINOR = 23
+const CACHE_CAPACITY = 100
 
-// Parse "X.Y.Z" semver, return [major, minor, patch] or null.
-function parseSemver(raw: string): [number, number, number] | null {
-  const m = raw.trim().match(/(\d+)\.(\d+)\.(\d+)/)
-  if (!m) return null
-  return [parseInt(m[1], 10), parseInt(m[2], 10), parseInt(m[3], 10)]
+// In-memory LRU cache to avoid subprocess spawn on repeated commands
+const rewriteCache = new Map<string, string | null>()
+
+function getCachedRewrite(cmd: string): string | null | undefined {
+  if (!rewriteCache.has(cmd)) return undefined
+  const val = rewriteCache.get(cmd)!
+  rewriteCache.delete(cmd)
+  rewriteCache.set(cmd, val)
+  return val
+}
+
+function setCachedRewrite(cmd: string, val: string | null): void {
+  if (rewriteCache.size >= CACHE_CAPACITY) {
+    const firstKey = rewriteCache.keys().next().value
+    if (firstKey !== undefined) {
+      rewriteCache.delete(firstKey)
+    }
+  }
+  rewriteCache.set(cmd, val)
+}
+
+const NON_ROUTABLE_PREFIXES = [
+  "cd", "mkdir", "rmdir", "pwd", "export", "unset", "alias", "unalias",
+  "echo", "printf", "exit", "clear", "touch", "cp", "mv", "chmod",
+  "chown", "chgrp", "ln", "true", "false", "sleep", "which", "type"
+]
+
+function isNonRoutable(cmd: string): boolean {
+  const trimmed = cmd.trim()
+  if (trimmed === "" || trimmed.startsWith("rtk ")) return true
+  const firstWord = trimmed.split(/\s+/)[0]
+  return NON_ROUTABLE_PREFIXES.includes(firstWord)
 }
 
 // Calls `rtk rewrite`; returns the rewritten command or null (pass through).
@@ -29,13 +57,24 @@ async function rewriteCommand(
   cmd: string,
   signal?: AbortSignal
 ): Promise<string | null> {
+  const cached = getCachedRewrite(cmd)
+  if (cached !== undefined) {
+    return cached
+  }
+
   const result = await pi.exec("rtk", ["rewrite", cmd], {
     timeout: REWRITE_TIMEOUT_MS,
     signal,
   })
-  if (result.killed) return null
-  if (result.code !== 0 && result.code !== 3) return null
-  return result.stdout.trim() || null
+
+  if (result.killed || (result.code !== 0 && result.code !== 3)) {
+    setCachedRewrite(cmd, null)
+    return null
+  }
+
+  const rewritten = result.stdout.trim() || null
+  setCachedRewrite(cmd, rewritten)
+  return rewritten
 }
 
 export default async function (pi: ExtensionAPI) {
@@ -61,9 +100,8 @@ export default async function (pi: ExtensionAPI) {
       if (!isToolCallEventType("bash", event)) return
 
       const cmd = event.input.command
-      if (typeof cmd !== "string" || cmd.trim() === "") return
+      if (typeof cmd !== "string" || isNonRoutable(cmd)) return
 
-      if (cmd.startsWith("rtk ")) return
       if (process.env.RTK_DISABLED === "1") return
 
       // Delegate to RTK.
@@ -78,3 +116,11 @@ export default async function (pi: ExtensionAPI) {
     }
   })
 }
+
+// Parse "X.Y.Z" semver, return [major, minor, patch] or null.
+function parseSemver(raw: string): [number, number, number] | null {
+  const m = raw.trim().match(/(\d+)\.(\d+)\.(\d+)/)
+  if (!m) return null
+  return [parseInt(m[1], 10), parseInt(m[2], 10), parseInt(m[3], 10)]
+}
+
