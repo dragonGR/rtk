@@ -11,6 +11,8 @@
 >
 > This repository is a personal fork of RTK maintained by **dragonGR**. With full respect and appreciation for the original developers of [rtk-ai/rtk](https://github.com/rtk-ai/rtk), this fork focuses on continuous optimization, streamlining unnecessary complexity, and maintaining a leaner, high-performance CLI proxy.
 >
+> **AI Agent Setup**: If you want to use your AI coding agent in this repository, instruct it to inspect the [`rtk-audit/`](rtk-audit/) folder first ([`ARCHITECTURE.md`](rtk-audit/ARCHITECTURE.md), [`TESTING.md`](rtk-audit/TESTING.md), [`RUST_PATTERNS.md`](rtk-audit/RUST_PATTERNS.md)). Ideally, you can copy the contents of `rtk-audit/` into your agent's personal skills directory — that way your agent knows exactly what this repository is all about, saving time and context.
+>
 > **Contributions**: Pull requests are welcome! However, please ensure code is well-tested, production-grade, and clean — low-quality AI slop will be rejected.
 >
 > **Getting Started**: Build and install this fork locally right away by running:
@@ -37,16 +39,6 @@
   <a href="https://www.rtk-ai.app/guide/troubleshooting">Troubleshooting</a> &bull;
   <a href="docs/contributing/ARCHITECTURE.md">Architecture</a> &bull;
   <a href="https://discord.gg/RySmvNF5kF">Discord</a>
-</p>
-
-<p align="center">
-  <a href="README.md">English</a> &bull;
-  <a href="README_fr.md">Francais</a> &bull;
-  <a href="README_zh.md">中文</a> &bull;
-  <a href="README_ja.md">日本語</a> &bull;
-  <a href="README_ko.md">한국어</a> &bull;
-  <a href="README_es.md">Espanol</a> &bull;
-  <a href="README_pt.md">Português</a>
 </p>
 
 ---
