@@ -11,7 +11,7 @@ sidebar:
 
 Two unrelated projects share the name `rtk`. Make sure you install the right one:
 
-- **Rust Token Killer** (`rtk-ai/rtk`) — this project, a token-saving CLI proxy
+- **Rust Token Killer** (`dragonGR/rtk`) — this project, a token-saving CLI proxy
 - **Rust Type Kit** (`reachingforthejack/rtk`) — a different tool for generating Rust types
 
 The easiest way to verify you have the correct one: run `rtk gain`. It should display the savings dashboard. If it returns "command not found", you either have the wrong package or RTK is not installed.
@@ -28,13 +28,13 @@ If both commands work, RTK is already installed. Skip to [Project initialization
 ## Quick install (Linux and macOS)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/master/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/dragonGR/rtk/master/install.sh | sh
 ```
 
 ## Homebrew (macOS and Linux)
 
 ```bash
-brew install rtk-ai/tap/rtk
+brew install dragonGR/tap/rtk
 ```
 
 ## Cargo
@@ -44,8 +44,9 @@ brew install rtk-ai/tap/rtk
 :::
 
 ```bash
-cargo install --git https://github.com/rtk-ai/rtk --branch master rtk
+cargo install --git https://github.com/dragonGR/rtk --branch master rtk
 ```
+
 
 ## Pre-built binaries (Windows, Linux, macOS)
 

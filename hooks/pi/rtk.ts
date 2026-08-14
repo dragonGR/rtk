@@ -97,12 +97,12 @@ export default async function (pi: ExtensionAPI) {
 
   pi.on("tool_call", async (event, ctx) => {
     try {
+      if (process.env.RTK_DISABLED === "1") return
       if (!isToolCallEventType("bash", event)) return
 
       const cmd = event.input.command
       if (typeof cmd !== "string" || isNonRoutable(cmd)) return
 
-      if (process.env.RTK_DISABLED === "1") return
 
       // Delegate to RTK.
       const rewritten = await rewriteCommand(pi, cmd, ctx.signal)
