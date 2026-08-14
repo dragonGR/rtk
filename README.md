@@ -7,20 +7,33 @@
 </p>
 
 > [!NOTE]
-> **Fork Notice by [dragonGR](https://github.com/dragonGR)**
+> ### 🚀 Fork & Optimization Guide by [dragonGR](https://github.com/dragonGR)
 >
-> This repository is a personal fork of RTK maintained by **dragonGR**. With full respect and appreciation for the original developers of [rtk-ai/rtk](https://github.com/rtk-ai/rtk), this fork focuses on continuous optimization, streamlining unnecessary complexity, and maintaining a leaner, high-performance CLI proxy.
+> This repository is a personal fork of RTK maintained by **dragonGR**. With full respect and appreciation for the original creators and maintainers of [rtk-ai/rtk](https://github.com/rtk-ai/rtk), this fork focuses on continuous optimization, streamlining unnecessary complexity, and delivering a high-performance CLI proxy.
 >
-> **AI Agent Setup**: If you want to use your AI coding agent in this repository, instruct it to inspect the [`rtk-audit/`](rtk-audit/) folder first ([`ARCHITECTURE.md`](rtk-audit/ARCHITECTURE.md), [`TESTING.md`](rtk-audit/TESTING.md), [`RUST_PATTERNS.md`](rtk-audit/RUST_PATTERNS.md)). Ideally, you can copy the contents of `rtk-audit/` into your agent's personal skills directory — that way your agent knows exactly what this repository is all about, saving time and context.
+> #### ⚡ Recommended Configuration Tips (`~/.config/rtk/config.toml`)
+> To maximize your token savings, update your `config.toml` (`rtk config`) with these recommended settings:
+> ```toml
+> [display]
+> colors = true
+> emoji = true
+> max_width = 120
+> ultra_compact = true       # Enable ultra-compact mode: strips ASCII borders and saves 15-20% extra tokens
 >
-> **Contributions**: Pull requests are welcome! However, please ensure code is well-tested, production-grade, and clean — low-quality AI slop will be rejected.
->
-> **Getting Started**: Build and install this fork locally right away by running:
-> ```bash
-> ./install.sh
-> # or
-> bash install.sh
+> [limits]
+> grep_max_results = 100     # Tighten max search results (default: 200) to avoid context bloat
+> grep_max_per_file = 15     # Limit matches per file
+> status_max_files = 15      # Limit git status file listing
+> passthrough_max_chars = 2000
 > ```
+>
+> #### 🤖 AI Agent Setup Tip
+> If you are pair programming with an AI agent in this repository, instruct it to inspect [`rtk-audit/`](rtk-audit/) ([`ARCHITECTURE.md`](rtk-audit/ARCHITECTURE.md), [`TESTING.md`](rtk-audit/TESTING.md), [`RUST_PATTERNS.md`](rtk-audit/RUST_PATTERNS.md)) first.
+> *Pro Tip*: Copy the contents of `rtk-audit/` into your agent's global skills directory (e.g. `~/.gemini/config/skills/rtk-audit/` or `~/.agents/skills/rtk-audit/`). This allows any AI agent in any workspace to immediately understand the repository architecture and conventions without spending turn time scanning.
+>
+> #### 💡 Quick Start & Contributions
+> - **Local Installation**: Build and install locally using `./install.sh` (or `bash install.sh`).
+> - **Contributions**: PRs are welcome! Please ensure code is production-grade, modular, and thoroughly tested — low-quality AI slop will be rejected.
 
 > 🤖 **Agent Instruction**: Before making architectural changes or implementing new features in this repository, inspect [`rtk-audit/`](rtk-audit/) ([`ARCHITECTURE.md`](rtk-audit/ARCHITECTURE.md), [`TESTING.md`](rtk-audit/TESTING.md), [`RUST_PATTERNS.md`](rtk-audit/RUST_PATTERNS.md)) first.
 
