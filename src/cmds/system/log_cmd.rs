@@ -3,11 +3,10 @@
 use crate::core::guard::never_worse;
 use crate::core::tracking;
 use crate::core::truncate::{reduced, CAP_WARNINGS};
+use crate::core::utils::{read_text_file_capped, read_text_stdin_capped};
 use anyhow::Result;
 use regex::Regex;
 use std::collections::HashMap;
-use std::fs;
-use std::io::{self, BufRead};
 use std::path::Path;
 use std::sync::LazyLock;
 
@@ -30,7 +29,7 @@ pub fn run_file(file: &Path, verbose: u8) -> Result<()> {
         eprintln!("Analyzing log: {}", file.display());
     }
 
-    let content = fs::read_to_string(file)?;
+    let content = read_text_file_capped(file)?;
     let result = analyze_logs(&content);
     let shown = never_worse(&content, &result);
     println!("{}", shown);
@@ -47,13 +46,7 @@ pub fn run_file(file: &Path, verbose: u8) -> Result<()> {
 pub fn run_stdin(_verbose: u8) -> Result<()> {
     let timer = tracking::TimedExecution::start();
 
-    let mut content = String::new();
-    let stdin = io::stdin();
-    for line in stdin.lock().lines() {
-        content.push_str(&line?);
-        content.push('\n');
-    }
-
+    let content = read_text_stdin_capped()?;
     let result = analyze_logs(&content);
     let shown = never_worse(&content, &result);
     println!("{}", shown);
@@ -62,6 +55,7 @@ pub fn run_stdin(_verbose: u8) -> Result<()> {
 
     Ok(())
 }
+
 
 /// For use by other modules
 pub fn run_stdin_str(content: &str) -> String {
@@ -73,10 +67,8 @@ fn analyze_logs(content: &str) -> String {
     let mut error_counts: HashMap<String, usize> = HashMap::new();
     let mut warn_counts: HashMap<String, usize> = HashMap::new();
     let mut info_counts: HashMap<String, usize> = HashMap::new();
-    let mut unique_errors: Vec<String> = Vec::new();
-    let mut unique_warnings: Vec<String> = Vec::new();
-
-    // Use module-level LazyLock regexes for normalization
+    let mut error_first: HashMap<String, String> = HashMap::new();
+    let mut warning_first: HashMap<String, String> = HashMap::new();
 
     for line in content.lines() {
         let line_lower = line.to_lowercase();
@@ -85,10 +77,6 @@ fn analyze_logs(content: &str) -> String {
         let normalized =
             normalize_log_line(line, &TIMESTAMP_RE, &UUID_RE, &HEX_RE, &NUM_RE, &PATH_RE);
 
-        // Categorize. The error bucket also covers severity labels above ERROR
-        // (CRITICAL, FATAL, ALERT, EMERGENCY, SEVERE, PANIC) — these are the most
-        // important lines in a log and were previously dropped as noise when they
-        // didn't literally contain "error".
         if line_lower.contains("error")
             || line_lower.contains("fatal")
             || line_lower.contains("panic")
@@ -99,13 +87,13 @@ fn analyze_logs(content: &str) -> String {
         {
             let count = error_counts.entry(normalized.clone()).or_insert(0);
             if *count == 0 {
-                unique_errors.push(line.to_string());
+                error_first.insert(normalized.clone(), line.to_string());
             }
             *count += 1;
         } else if line_lower.contains("warn") || line_lower.contains("notice") {
             let count = warn_counts.entry(normalized.clone()).or_insert(0);
             if *count == 0 {
-                unique_warnings.push(line.to_string());
+                warning_first.insert(normalized.clone(), line.to_string());
             }
             *count += 1;
         } else if line_lower.contains("info") {
@@ -133,7 +121,7 @@ fn analyze_logs(content: &str) -> String {
     result.push(String::new());
 
     // Errors with counts
-    if !unique_errors.is_empty() {
+    if !error_counts.is_empty() {
         result.push("[ERRORS]".to_string());
 
         // Sort by count
@@ -142,15 +130,10 @@ fn analyze_logs(content: &str) -> String {
 
         const MAX_LOG_ERRORS: usize = CAP_WARNINGS;
         for (normalized, count) in error_list.iter().take(MAX_LOG_ERRORS) {
-            // Find original message
-            let original = unique_errors
-                .iter()
-                .find(|e| {
-                    &normalize_log_line(e, &TIMESTAMP_RE, &UUID_RE, &HEX_RE, &NUM_RE, &PATH_RE)
-                        == *normalized
-                })
+            let original = error_first
+                .get(*normalized)
                 .map(|s| s.as_str())
-                .unwrap_or(normalized);
+                .unwrap_or(normalized.as_str());
 
             let truncated = if original.len() > 100 {
                 let t: String = original.chars().take(97).collect();
@@ -176,23 +159,18 @@ fn analyze_logs(content: &str) -> String {
     }
 
     // Warnings with counts
-    if !unique_warnings.is_empty() {
+    if !warn_counts.is_empty() {
         result.push("[WARNINGS]".to_string());
 
         let mut warn_list: Vec<_> = warn_counts.iter().collect();
         warn_list.sort_by(|a, b| b.1.cmp(a.1));
 
-        // warnings are lower severity than errors — show fewer.
         const MAX_LOG_WARNS: usize = reduced(CAP_WARNINGS, 5);
         for (normalized, count) in warn_list.iter().take(MAX_LOG_WARNS) {
-            let original = unique_warnings
-                .iter()
-                .find(|w| {
-                    &normalize_log_line(w, &TIMESTAMP_RE, &UUID_RE, &HEX_RE, &NUM_RE, &PATH_RE)
-                        == *normalized
-                })
+            let original = warning_first
+                .get(*normalized)
                 .map(|s| s.as_str())
-                .unwrap_or(normalized);
+                .unwrap_or(normalized.as_str());
 
             let truncated = if original.len() > 100 {
                 let t: String = original.chars().take(97).collect();
@@ -214,6 +192,7 @@ fn analyze_logs(content: &str) -> String {
                 warn_list.len() - MAX_LOG_WARNS
             ));
         }
+
     }
 
     result.join("\n")

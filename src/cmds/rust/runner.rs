@@ -114,6 +114,29 @@ fn build_shell_command(command: &str) -> Command {
     }
 }
 
+/// Run a command directly without `sh -c` wrapper and filter output to show only errors/warnings
+#[allow(dead_code)]
+pub fn run_err_cmd(prog: &str, args: &[String], verbose: u8) -> Result<i32> {
+    let full_cmd = if args.is_empty() {
+        prog.to_string()
+    } else {
+        format!("{} {}", prog, args.join(" "))
+    };
+
+    if verbose > 0 {
+        eprintln!("Running: {}", full_cmd);
+    }
+    let mut cmd = Command::new(prog);
+    cmd.args(args);
+    crate::core::runner::run_streamed(
+        cmd,
+        "err",
+        &full_cmd,
+        Box::new(ErrorStreamFilter::new()),
+        crate::core::runner::RunOptions::with_tee("err"),
+    )
+}
+
 /// Run a command and filter output to show only errors/warnings
 pub fn run_err(command: &str, verbose: u8) -> Result<i32> {
     if verbose > 0 {
@@ -126,6 +149,31 @@ pub fn run_err(command: &str, verbose: u8) -> Result<i32> {
         command,
         Box::new(ErrorStreamFilter::new()),
         crate::core::runner::RunOptions::with_tee("err"),
+    )
+}
+
+/// Run tests directly without `sh -c` wrapper and show only failures
+#[allow(dead_code)]
+pub fn run_test_cmd(prog: &str, args: &[String], verbose: u8) -> Result<i32> {
+
+    let full_cmd = if args.is_empty() {
+        prog.to_string()
+    } else {
+        format!("{} {}", prog, args.join(" "))
+    };
+
+    if verbose > 0 {
+        eprintln!("Running tests: {}", full_cmd);
+    }
+    let mut cmd = Command::new(prog);
+    cmd.args(args);
+    let command_owned = full_cmd.clone();
+    crate::core::runner::run_filtered(
+        cmd,
+        "test",
+        &full_cmd,
+        move |raw| extract_test_summary(raw, &command_owned),
+        crate::core::runner::RunOptions::with_tee("test"),
     )
 }
 
@@ -144,6 +192,7 @@ pub fn run_test(command: &str, verbose: u8) -> Result<i32> {
         crate::core::runner::RunOptions::with_tee("test"),
     )
 }
+
 
 #[cfg(test)]
 fn filter_errors(output: &str) -> String {

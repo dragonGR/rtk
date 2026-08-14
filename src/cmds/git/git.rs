@@ -158,9 +158,9 @@ fn run_diff(
         return Ok(0);
     }
 
-    // Default RTK behavior: stat first, then compacted diff
+    // Default RTK behavior: capture stat + patch in one pass, then compact the patch.
     let mut cmd = git_cmd(global_args);
-    cmd.arg("diff").arg("--stat");
+    cmd.arg("diff").arg("--patch-with-stat");
 
     for arg in args {
         cmd.arg(arg);
@@ -185,30 +185,25 @@ fn run_diff(
         eprintln!("Git diff summary:");
     }
 
-    // Now get actual diff but compact it
-    let mut diff_cmd = git_cmd(global_args);
-    diff_cmd.arg("diff");
-    for arg in args {
-        diff_cmd.arg(arg);
-    }
-
-    let diff_result = exec_capture(&mut diff_cmd).context("Failed to run git diff")?;
-
-    let printed = if !diff_result.stdout.is_empty() {
-        let compacted = compact_diff(&diff_result.stdout, max_lines.unwrap_or(500));
-        format!("{}\n\nChanges:\n{}", result.stdout.trim(), compacted)
+    let (stat_text, diff_text) = split_stat_and_patch(&result.stdout);
+    let printed = if !diff_text.is_empty() {
+        let compacted = compact_diff(diff_text, max_lines.unwrap_or(500));
+        if !stat_text.is_empty() {
+            format!("{}\n\nChanges:\n{}", stat_text, compacted)
+        } else {
+            format!("Changes:\n{}", compacted)
+        }
     } else {
-        result.stdout.trim().to_string()
+        stat_text.to_string()
     };
 
-    let raw = format!("{}\n{}", result.stdout, diff_result.stdout);
-    let shown = never_worse(&raw, &printed);
+    let shown = never_worse(&result.stdout, &printed);
     println!("{}", shown);
 
     timer.track(
         &format!("git diff {}", args.join(" ")),
         &format!("rtk git diff {}", args.join(" ")),
-        &raw,
+        &result.stdout,
         shown,
     );
 
@@ -263,72 +258,86 @@ fn run_show(
         return Ok(0);
     }
 
-    // Get raw output for tracking
-    let mut raw_cmd = git_cmd(global_args);
-    raw_cmd.arg("show");
+    let mut cmd = git_cmd(global_args);
+    cmd.args([
+        "show",
+        "--stat",
+        "--format=__RTK_SUMMARY__%n%h %s (%ar) <%an>%n__RTK_END_SUMMARY__",
+    ]);
     for arg in args {
-        raw_cmd.arg(arg);
+        cmd.arg(arg);
     }
-    let raw_output = exec_capture(&mut raw_cmd)
-        .map(|r| r.stdout)
-        .unwrap_or_default();
 
-    // Step 1: one-line commit summary
-    let mut summary_cmd = git_cmd(global_args);
-    summary_cmd.args(["show", "--no-patch", "--pretty=format:%h %s (%ar) <%an>"]);
-    for arg in args {
-        summary_cmd.arg(arg);
+    let result = exec_capture(&mut cmd).context("Failed to run git show")?;
+    if !result.success() {
+        eprintln!("{}", result.stderr);
+        return Ok(result.exit_code);
     }
-    let summary_result = exec_capture(&mut summary_cmd).context("Failed to run git show")?;
-    if !summary_result.success() {
-        eprintln!("{}", summary_result.stderr);
-        return Ok(summary_result.exit_code);
-    }
-    let mut printed = summary_result.stdout.trim().to_string();
 
-    // Step 2: --stat summary
-    let mut stat_cmd = git_cmd(global_args);
-    stat_cmd.args(["show", "--stat", "--pretty=format:"]);
-    for arg in args {
-        stat_cmd.arg(arg);
-    }
-    let stat_result = exec_capture(&mut stat_cmd).context("Failed to run git show --stat")?;
-    let stat_text = stat_result.stdout.trim();
+    let (summary_text, remainder) = split_show_summary(&result.stdout);
+    let (stat_text, diff_text) = split_stat_and_patch(remainder);
+
+    let mut printed = summary_text.to_string();
     if !stat_text.is_empty() {
-        printed.push('\n');
+        if !printed.is_empty() {
+            printed.push('\n');
+        }
         printed.push_str(stat_text);
     }
-
-    // Step 3: compacted diff
-    let mut diff_cmd = git_cmd(global_args);
-    diff_cmd.args(["show", "--pretty=format:"]);
-    for arg in args {
-        diff_cmd.arg(arg);
-    }
-    let diff_result = exec_capture(&mut diff_cmd).context("Failed to run git show (diff)")?;
-    let diff_text = diff_result.stdout.trim();
 
     if !diff_text.is_empty() {
         if verbose > 0 {
             printed.push_str("\n\nChanges:");
         }
         let compacted = compact_diff(diff_text, max_lines.unwrap_or(500));
-        printed.push('\n');
+        if !printed.is_empty() {
+            printed.push('\n');
+        }
         printed.push_str(&compacted);
     }
 
-    let shown = never_worse(&raw_output, &printed);
+    let shown = never_worse(&result.stdout, &printed);
     println!("{}", shown);
 
     timer.track(
         &format!("git show {}", args.join(" ")),
         &format!("rtk git show {}", args.join(" ")),
-        &raw_output,
+        &result.stdout,
         shown,
     );
 
     Ok(0)
 }
+
+fn split_stat_and_patch(output: &str) -> (&str, &str) {
+    if let Some(idx) = output.find("\ndiff --git ") {
+        let stat = output[..idx].trim();
+        let patch = output[idx + 1..].trim();
+        (stat, patch)
+    } else if output.starts_with("diff --git ") {
+        ("", output.trim())
+    } else {
+        (output.trim(), "")
+    }
+}
+
+fn split_show_summary(output: &str) -> (&str, &str) {
+    let start_marker = "__RTK_SUMMARY__";
+    let end_marker = "__RTK_END_SUMMARY__";
+
+    let Some(start) = output.find(start_marker) else {
+        return ("", output);
+    };
+    let after_start = &output[start + start_marker.len()..];
+    let Some(end) = after_start.find(end_marker) else {
+        return ("", output);
+    };
+
+    let summary = after_start[..end].trim();
+    let remainder = after_start[end + end_marker.len()..].trim();
+    (summary, remainder)
+}
+
 
 fn is_blob_show_arg(arg: &str) -> bool {
     // Detect `rev:path` style arguments while ignoring flags like `--pretty=format:...`.
@@ -3322,4 +3331,22 @@ To https://github.com/foo/bar.git
             output_tokens
         );
     }
+
+    #[test]
+    fn test_split_stat_and_patch() {
+        let output = " foo.rs | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)\n\ndiff --git a/foo.rs b/foo.rs\n@@ -1 +1 @@\n-old\n+new\n";
+        let (stat, patch) = split_stat_and_patch(output);
+        assert!(stat.contains("1 file changed"));
+        assert!(patch.starts_with("diff --git"));
+    }
+
+    #[test]
+    fn test_split_show_summary() {
+        let output =
+            "__RTK_SUMMARY__\nabc1234 feat: test (1 day ago) <alex>\n__RTK_END_SUMMARY__\n\n foo.rs | 1 +\n";
+        let (summary, remainder) = split_show_summary(output);
+        assert_eq!(summary, "abc1234 feat: test (1 day ago) <alex>");
+        assert!(remainder.contains("foo.rs"));
+    }
 }
+

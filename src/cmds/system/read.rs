@@ -3,8 +3,8 @@
 use crate::core::filter::{self, FilterLevel, Language};
 use crate::core::guard::never_worse;
 use crate::core::tracking;
+use crate::core::utils::{read_text_file_capped, read_text_stdin_capped};
 use anyhow::{Context, Result};
-use std::fs;
 use std::path::Path;
 
 pub fn run(
@@ -22,15 +22,10 @@ pub fn run(
     }
 
     // Read file content
-    let content = fs::read_to_string(file)
-        .with_context(|| format!("Failed to read file: {}", file.display()))?;
+    let content = read_text_file_capped(file)?;
 
-    // Detect language from extension
-    let lang = file
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(Language::from_extension)
-        .unwrap_or(Language::Unknown);
+    // Detect language from extension, filename, or shebang
+    let lang = detect_language(Some(file), &content);
 
     if verbose > 1 {
         eprintln!("Detected language: {:?}", lang);
@@ -92,8 +87,6 @@ pub fn run_stdin(
     line_numbers: bool,
     verbose: u8,
 ) -> Result<()> {
-    use std::io::{self, Read as IoRead};
-
     let timer = tracking::TimedExecution::start();
 
     if verbose > 0 {
@@ -101,13 +94,14 @@ pub fn run_stdin(
     }
 
     // Read from stdin
-    let mut content = String::new();
-    io::stdin()
-        .lock()
-        .read_to_string(&mut content)
-        .context("Failed to read from stdin")?;
+    let content = read_text_stdin_capped().context("Failed to read from stdin")?;
 
-    // No file extension, so use Unknown language
+    let lang = detect_language(None, &content);
+
+    if verbose > 1 {
+        eprintln!("Language: {:?} (stdin)", lang);
+    }
+
     let lang = Language::Unknown;
 
     if verbose > 1 {
@@ -158,6 +152,56 @@ fn format_with_line_numbers(content: &str) -> String {
     }
     out
 }
+
+fn detect_language(path: Option<&Path>, content: &str) -> Language {
+    if let Some(path) = path {
+        if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+            let by_extension = Language::from_extension(ext);
+            if by_extension != Language::Unknown {
+                return by_extension;
+            }
+        }
+
+        if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+            let lower = name.to_ascii_lowercase();
+            match lower.as_str() {
+                "dockerfile" | "containerfile" | "makefile" | "justfile" => {
+                    return Language::Shell;
+                }
+                "gemfile" | "rakefile" => return Language::Ruby,
+                _ => {}
+            }
+        }
+    }
+
+    detect_language_from_shebang(content).unwrap_or(Language::Unknown)
+}
+
+fn detect_language_from_shebang(content: &str) -> Option<Language> {
+    let first_line = content.lines().next()?.trim();
+    if !first_line.starts_with("#!") {
+        return None;
+    }
+
+    if first_line.contains("python") {
+        Some(Language::Python)
+    } else if first_line.contains("node")
+        || first_line.contains("deno")
+        || first_line.contains("bun")
+    {
+        Some(Language::JavaScript)
+    } else if first_line.contains("ruby") {
+        Some(Language::Ruby)
+    } else if first_line.contains("bash")
+        || first_line.contains("zsh")
+        || first_line.contains("/sh")
+    {
+        Some(Language::Shell)
+    } else {
+        None
+    }
+}
+
 
 fn apply_line_window(
     content: &str,
@@ -305,4 +349,29 @@ fn main() {{
             stderr
         );
     }
+
+    #[test]
+    fn test_detect_language_from_special_filename() {
+        assert_eq!(
+            detect_language(Some(Path::new("Dockerfile")), "# comment\nRUN echo hi\n"),
+            Language::Shell
+        );
+        assert_eq!(
+            detect_language(Some(Path::new("Makefile")), "# comment\nall:\n\tcargo test\n"),
+            Language::Shell
+        );
+    }
+
+    #[test]
+    fn test_detect_language_from_shebang() {
+        assert_eq!(
+            detect_language(None, "#!/usr/bin/env python3\nprint('hi')\n"),
+            Language::Python
+        );
+        assert_eq!(
+            detect_language(None, "#!/bin/bash\necho hi\n"),
+            Language::Shell
+        );
+    }
 }
+

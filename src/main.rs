@@ -1839,7 +1839,14 @@ fn run_cli() -> Result<i32> {
                     &merge_pnpm_args(&filter, &args),
                     cli.verbose,
                 )?,
-                PnpmCommands::Typecheck { args } => tsc_cmd::run(&args, cli.verbose)?,
+                PnpmCommands::Typecheck { args } => {
+                    if filter.is_empty() {
+                        tsc_cmd::run(&args, cli.verbose)?
+                    } else {
+                        tsc_cmd::run_with_pnpm_filters(&filter, &args, cli.verbose)?
+                    }
+                }
+
                 PnpmCommands::Other(args) => {
                     pnpm_cmd::run_passthrough(&merge_pnpm_args_os(&filter, &args), cli.verbose)?
                 }

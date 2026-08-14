@@ -41,6 +41,43 @@ pub fn run(args: &[String], verbose: u8) -> Result<i32> {
     )
 }
 
+pub fn run_with_pnpm_filters(
+    filters: &[String],
+    tsc_args: &[String],
+    verbose: u8,
+) -> Result<i32> {
+    let mut cmd = resolved_command("pnpm");
+    for f in filters {
+        cmd.arg("--filter").arg(f);
+    }
+    cmd.arg("exec").arg("tsc");
+    for arg in tsc_args {
+        cmd.arg(arg);
+    }
+
+    let mut display_args: Vec<String> = Vec::new();
+    for f in filters {
+        display_args.push("--filter".to_string());
+        display_args.push(f.clone());
+    }
+    display_args.push("exec".to_string());
+    display_args.push("tsc".to_string());
+    display_args.extend_from_slice(tsc_args);
+
+    if verbose > 0 {
+        eprintln!("Running: pnpm {}", display_args.join(" "));
+    }
+
+    runner::run_streamed(
+        cmd,
+        "tsc",
+        &display_args.join(" "),
+        Box::new(BlockStreamFilter::new(TscHandler::new())),
+        runner::RunOptions::with_tee("tsc"),
+    )
+}
+
+
 struct TscHandler {
     error_count: usize,
     files: HashSet<String>,
