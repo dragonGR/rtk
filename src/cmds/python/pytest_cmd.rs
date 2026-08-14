@@ -94,7 +94,8 @@ pub(crate) fn filter_pytest_output(output: &str) -> String {
             state = ParseState::Summary;
             // Save current failure if any
             if !current_failure.is_empty() {
-                failures.push(current_failure.join("\n"));
+                let failure_text = current_failure.join("\n");
+                failures.push(crate::core::utils::prune_framework_stack_trace(&failure_text));
                 current_failure.clear();
             }
             continue;
@@ -140,7 +141,8 @@ pub(crate) fn filter_pytest_output(output: &str) -> String {
                 if trimmed.starts_with("___") {
                     // New failure section
                     if !current_failure.is_empty() {
-                        failures.push(current_failure.join("\n"));
+                        let failure_text = current_failure.join("\n");
+                        failures.push(crate::core::utils::prune_framework_stack_trace(&failure_text));
                         current_failure.clear();
                     }
                     current_failure.push(trimmed.to_string());
@@ -161,7 +163,8 @@ pub(crate) fn filter_pytest_output(output: &str) -> String {
 
     // Save last failure if any
     if !current_failure.is_empty() {
-        failures.push(current_failure.join("\n"));
+        let failure_text = current_failure.join("\n");
+        failures.push(crate::core::utils::prune_framework_stack_trace(&failure_text));
     }
 
     // Build compact output
