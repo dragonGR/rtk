@@ -42,6 +42,45 @@ pub fn truncate(s: &str, max_len: usize) -> String {
     }
 }
 
+/// Prune vendor and internal framework stack frames from error stack traces.
+/// Keeps workspace-local stack frames while collapsing repetitive framework frames.
+#[allow(dead_code)]
+pub fn prune_framework_stack_trace(trace: &str) -> String {
+    if trace.is_empty() {
+        return String::new();
+    }
+
+    let mut lines = Vec::new();
+    let mut hidden_count = 0;
+
+    for line in trace.lines() {
+        let is_vendor_frame = line.contains("node_modules/")
+            || line.contains("node:internal/")
+            || line.contains("site-packages/")
+            || line.contains("/usr/lib/python")
+            || line.contains("std::panicking::")
+            || line.contains("core::panicking::")
+            || line.contains("rustc_driver")
+            || line.contains("rustc_interface");
+
+        if is_vendor_frame {
+            hidden_count += 1;
+        } else {
+            if hidden_count > 0 {
+                lines.push(format!("    [... {} internal framework frames hidden ...]", hidden_count));
+                hidden_count = 0;
+            }
+            lines.push(line.to_string());
+        }
+    }
+
+    if hidden_count > 0 {
+        lines.push(format!("    [... {} internal framework frames hidden ...]", hidden_count));
+    }
+
+    lines.join("\n")
+}
+
 /// Strip ANSI escape codes (colors, styles) from a string.
 ///
 /// # Arguments
@@ -1138,5 +1177,14 @@ mod tests {
     fn test_restrict_file_ignores_missing_path() {
         let tmp = tempfile::tempdir().unwrap();
         restrict_file(&tmp.path().join("absent.db-wal"));
+    }
+
+    #[test]
+    fn test_prune_framework_stack_trace() {
+        let input = "  at main (src/index.ts:10)\n  at Module._compile (node:internal/modules/cjs/loader:1376)\n  at Module._load (node:internal/modules/cjs/loader:1023)\n  at end (src/index.ts:25)";
+        let output = prune_framework_stack_trace(input);
+        assert!(output.contains("src/index.ts:10"));
+        assert!(output.contains("internal framework frames hidden"));
+        assert!(output.contains("src/index.ts:25"));
     }
 }

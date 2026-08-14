@@ -106,19 +106,17 @@ pub fn truncate_passthrough(output: &str) -> String {
     truncate_output(output, max_chars)
 }
 
-/// Truncate output to max length with ellipsis
+/// Truncate output to max length with smart head/tail preservation
 pub fn truncate_output(output: &str, max_chars: usize) -> String {
-    let chars: Vec<char> = output.chars().collect();
-    if chars.len() <= max_chars {
+    let char_count = output.chars().count();
+    if char_count <= max_chars {
         return output.to_string();
     }
 
-    let truncated: String = chars[..max_chars].iter().collect();
+    let head_tail = crate::core::truncate::truncate_head_tail_simd(output, 10, 15);
     format!(
         "{}\n\n[RTK:PASSTHROUGH] Output truncated ({} chars → {} chars)",
-        truncated,
-        chars.len(),
-        max_chars
+        head_tail, char_count, max_chars
     )
 }
 

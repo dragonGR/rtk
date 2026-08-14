@@ -77,6 +77,8 @@ pub struct DisplayConfig {
     pub colors: bool,
     pub emoji: bool,
     pub max_width: usize,
+    #[serde(default)]
+    pub ultra_compact: bool,
 }
 
 impl Default for DisplayConfig {
@@ -85,6 +87,7 @@ impl Default for DisplayConfig {
             colors: true,
             emoji: true,
             max_width: 120,
+            ultra_compact: false,
         }
     }
 }

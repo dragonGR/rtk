@@ -35,7 +35,6 @@ pub fn count_lines_simd(text: &str) -> usize {
 /// Slice text to at most `max_lines` using SIMD-accelerated memchr without string allocations.
 #[allow(dead_code)]
 pub fn truncate_lines_simd(text: &str, max_lines: usize) -> &str {
-
     if max_lines == 0 || text.is_empty() {
         return "";
     }
@@ -45,6 +44,53 @@ pub fn truncate_lines_simd(text: &str, max_lines: usize) -> &str {
     } else {
         text
     }
+}
+
+/// Truncate long outputs keeping the first `head_lines` and last `tail_lines`,
+/// replacing the middle section with a concise summary tag.
+pub fn truncate_head_tail_simd(text: &str, head_lines: usize, tail_lines: usize) -> String {
+    if text.is_empty() || head_lines == 0 && tail_lines == 0 {
+        return String::new();
+    }
+
+    let lines: Vec<&str> = text.lines().collect();
+    let total_lines = lines.len();
+
+    if total_lines <= head_lines + tail_lines {
+        return text.to_string();
+    }
+
+    let head_slice = &lines[..head_lines];
+    let tail_slice = &lines[total_lines - tail_lines..];
+
+    let skipped_lines = total_lines - head_lines - tail_lines;
+    let skipped_bytes: usize = lines[head_lines..total_lines - tail_lines]
+        .iter()
+        .map(|l| l.len() + 1)
+        .sum();
+
+    let mut result = String::with_capacity(text.len() / 2);
+    for line in head_slice {
+        result.push_str(line);
+        result.push('\n');
+    }
+
+    let unit = if skipped_bytes >= 1024 {
+        format!("{:.1} KB", skipped_bytes as f64 / 1024.0)
+    } else {
+        format!("{} B", skipped_bytes)
+    };
+
+    result.push_str(&format!("[... skipped {} lines ({}) ...]\n", skipped_lines, unit));
+
+    for (i, line) in tail_slice.iter().enumerate() {
+        result.push_str(line);
+        if i + 1 < tail_slice.len() || text.ends_with('\n') {
+            result.push('\n');
+        }
+    }
+
+    result
 }
 
 #[cfg(test)]
@@ -64,6 +110,16 @@ mod tests {
         let input = "line1\nline2\nline3\nline4\n";
         assert_eq!(truncate_lines_simd(input, 2), "line1\nline2\n");
         assert_eq!(truncate_lines_simd(input, 10), input);
+    }
+
+    #[test]
+    fn test_truncate_head_tail_simd() {
+        let lines: Vec<String> = (1..=20).map(|i| format!("line{i}")).collect();
+        let input = lines.join("\n");
+        let result = truncate_head_tail_simd(&input, 3, 3);
+        assert!(result.starts_with("line1\nline2\nline3\n"));
+        assert!(result.contains("[... skipped 14 lines"));
+        assert!(result.ends_with("line18\nline19\nline20"));
     }
 
 
