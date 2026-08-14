@@ -1,18 +1,35 @@
-# LLM Agent Hooks
+# LLM Agent Hooks (dragonGR Fork)
 
 ## Scope
 
-**Deployed hook artifacts** — the actual files installed on user machines by `rtk init`. These are shell scripts, TypeScript plugins, and rules files that run outside the Rust binary. They are **thin delegates**: parse agent-specific JSON, call `rtk rewrite` as a subprocess, format agent-specific response. Zero filtering logic lives here.
+**Deployed hook artifacts** — the actual files installed on user machines by `rtk init`. These are shell scripts, TypeScript plugins, Rust binary hooks, and rules files that run outside or alongside the Rust binary. They act as **thin delegates**: parse agent-specific JSON, call `rtk rewrite` as a subprocess, and format the response in the target agent's expected structure with zero overhead.
 
-Owns: per-agent hook scripts and configuration files for 10 supported agents (Claude Code, Copilot, Cursor, Cline, Windsurf, Codex, OpenCode, Hermes, Pi, Mistral Vibe).
+Owns: per-agent hook scripts and configuration files for supported agents (Claude Code, Gemini CLI, Google Antigravity, Copilot, Cursor, Cline, Windsurf, Codex, OpenCode, Hermes, Pi, Mistral Vibe, Factory Droid, KiloCode, Kimi).
 
-Does **not** own: hook installation/uninstallation (that's `src/hooks/init.rs`), the rewrite pattern registry (that's `discover/registry`), or integrity verification (that's `src/hooks/integrity.rs`).
+Does **not** own: hook installation/uninstallation (that's `src/hooks/init.rs`), the rewrite pattern registry (that's `src/discover/registry.rs`), or integrity verification (that's `src/hooks/integrity.rs`).
 
-Relationship to `src/hooks/`: that component **creates** these files; this directory **contains** them.
+---
+
+## Global-First Installation Model (20+ Developer Projects)
+
+For developers managing dozens of projects, RTK recommends **Global User-Level Activation**. You run activation **once** on your machine, and RTK optimizes terminal commands across **all 20+ repositories** automatically without cluttering project folders:
+
+```bash
+rtk init -g                  # Global hook for Claude Code (~/.claude/settings.json)
+rtk init -g --gemini         # Global hook for Gemini CLI (~/.gemini/settings.json)
+rtk init --agent pi          # Global plugin for Pi Agent (~/.pi/)
+rtk init --agent antigravity # Global/Project rules for Google Antigravity
+rtk init --codex             # Global rules for OpenAI Codex CLI (AGENTS.md)
+rtk init --show              # View active global hook status
+```
+
+---
 
 ## Purpose
 
-LLM agent integrations that intercept CLI commands and route them through RTK for token optimization. Each hook transparently rewrites raw commands (e.g., `git status`) to their RTK equivalents (e.g., `rtk git status`), cutting up to 90% of the bash output that reaches the LLM context without requiring the agent or user to change their workflow.
+LLM agent integrations intercept CLI commands and route them through RTK for token optimization. Each hook transparently rewrites raw commands (e.g., `git status`) to their RTK equivalents (e.g., `rtk git status`), cutting **85% to 99%** of output noise without requiring the agent or user to manually type prefixes.
+
+---
 
 ## How It Works
 
@@ -24,58 +41,56 @@ Agent runs command (e.g., "cargo test --nocapture")
   -> Registry matches pattern, returns "rtk cargo test --nocapture"
   -> Hook sends response in agent-specific JSON format
   -> Agent executes "rtk cargo test --nocapture" instead
-  -> Filtered output reaches LLM (up to 90% fewer bash output bytes)
+  -> Filtered output reaches LLM (85%-99% fewer bash output tokens)
 ```
 
-All rewrite logic lives in the Rust binary (`src/discover/registry.rs`). Hook scripts are **thin delegates** that handle agent-specific JSON formats and call `rtk rewrite` for the actual decision. This ensures a single source of truth for all 70+ rewrite patterns.
+---
 
-## Directory Structure
+## Supported Agents Matrix
 
-Each agent subdirectory has its own README with hook-specific details:
+| Agent | Mechanism | Hook Type | Modifies Command? | Location / Target |
+|-------|-----------|-----------|-------------------|-------------------|
+| **Claude Code** | Shell hook (`PreToolUse`) | Transparent rewrite | Yes (`updatedInput`) | `~/.claude/hooks/` & `~/.claude.json` |
+| **Gemini CLI** | Rust binary (`rtk hook gemini`) | Transparent rewrite | Yes (`hookSpecificOutput`) | `~/.gemini/hooks/` & `~/.gemini/settings.json` |
+| **Google Antigravity** | Rules file | Prompt-level guidance | Yes (via prompt rules) | `.agents/rules/antigravity-rtk-rules.md` |
+| **VS Code Copilot Chat** | Rust binary (`rtk hook copilot`) | Transparent rewrite | Yes (`updatedInput`) | VS Code Extension settings |
+| **GitHub Copilot CLI** | Rust binary (`rtk hook copilot`) | Deny-with-suggestion | No (agent retries) | `~/.copilot-cli/` |
+| **Cursor** | Rust binary | Transparent rewrite | Yes (`updated_input`) | `.cursorrules` / `~/.cursor/` |
+| **Cline / Roo Code** | Rules file | Prompt-level guidance | N/A | `.clinerules` |
+| **Windsurf** | Rules file | Prompt-level guidance | N/A | `.windsurfrules` |
+| **Codex CLI** | Rules file (`AGENTS.md`) | Prompt-level guidance | N/A | `AGENTS.md` / `~/.codex/` |
+| **OpenCode** | TypeScript plugin (`tool.execute.before`) | In-place mutation | Yes | `zx` plugin |
+| **Pi Agent** | TypeScript extension (`tool_call` event) | In-place mutation | Yes | `~/.pi/rtk.ts` |
+| **Hermes CLI** | Python plugin (`pre_tool_call`) | In-place mutation | Yes | `~/.hermes/hooks/` |
+| **Mistral Vibe** | Rust binary (`rtk hook vibe`) | Transparent rewrite | Yes | `~/.vibe/hooks.toml` |
+| **Factory Droid** | Plugin wrapper | Transparent rewrite | Yes | `~/.droid/` |
 
-- **[`claude/`](claude/README.md)** — Shell hook, `PreToolUse` JSON format, `settings.json` patching, test script
-- **[`copilot/`](copilot/README.md)** — Rust binary hook, dual format (VS Code Chat vs Copilot CLI), deny-with-suggestion fallback
-- **[`cursor/`](cursor/README.md)** — Shell hook, Cursor JSON format, empty `{}` response requirement
-- **[`cline/`](cline/README.md)** — Rules file (prompt-level), `.clinerules` project-local installation
-- **[`windsurf/`](windsurf/README.md)** — Rules file (prompt-level), `.windsurfrules` workspace-scoped
-- **[`codex/`](codex/README.md)** — Awareness document, `AGENTS.md` integration, `$CODEX_HOME` or `~/.codex/` location
-- **[`opencode/`](opencode/README.md)** — TypeScript plugin, `zx` library, `tool.execute.before` event, in-place mutation
-- **[`pi/`](pi/README.md)** — TypeScript extension, `tool_call` event, `isToolCallEventType` guard, in-place mutation, `~/.pi/agent/extensions/`
-- **[`hermes/`](hermes/README.md)** — Python plugin, `pre_tool_call` hook, in-place terminal command mutation
-- **[`vibe/`](vibe/README.md)** — Rust binary hook (`rtk hook vibe`), `pre_tool` entry in `~/.vibe/hooks.toml`, `hook_specific_output.tool_input` rewrite plus `system_message` for UI visibility
+---
 
-## Supported Agents
+## Optimization Engine Features
 
-| Agent | Mechanism | Hook Type | Can Modify Command? |
-|-------|-----------|-----------|---------------------|
-| Claude Code | Shell hook (`PreToolUse`) | Transparent rewrite | Yes (`updatedInput`) |
-| VS Code Copilot Chat | Rust binary (`rtk hook copilot`) | Transparent rewrite | Yes (`updatedInput`) |
-| GitHub Copilot CLI | Rust binary (`rtk hook copilot`) | Deny-with-suggestion | No (agent retries) |
-| Cursor | Rust binary | Transparent rewrite | Yes (`updated_input`) |
-| Gemini CLI | Rust binary (`rtk hook gemini`) | Transparent rewrite | Yes (`hookSpecificOutput`) |
-| Cline / Roo Code | Custom instructions (rules file) | Prompt-level guidance | N/A |
-| Windsurf | Custom instructions (rules file) | Prompt-level guidance | N/A |
-| Codex CLI | AGENTS.md / instructions | Prompt-level guidance | N/A |
-| OpenCode | TypeScript plugin (`tool.execute.before`) | In-place mutation | Yes |
-| Pi | TypeScript extension (`tool_call` event) | In-place mutation | Yes |
-| Hermes | Python plugin (`pre_tool_call`) | In-place mutation | Yes |
-| Mistral Vibe | Rust binary (`rtk hook vibe`) | Transparent rewrite | Yes (`hook_specific_output.tool_input`) |
+| Category | Optimization Mechanism | Typical Savings |
+|----------|------------------------|-----------------|
+| **AST Code Skeletonization** | Extracts structs, types, function signatures; strips bodies (`rtk read`) | **95% – 97%** |
+| **Workspace Delta Caching** | Suppresses repeated command output; emits concise diffs (`rtk --delta`) | **99%** |
+| **Stack Trace Pruning** | Strips internal framework frames (`pytest`, `cargo`, `jest`, `vitest`) | **95%** |
+| **API & K8s Payload Trimming** | Removes `managedFields`, `ownerReferences`, `resourceVersion` (`kubectl`, `gh api`) | **90%** |
+| **SIMD Head/Tail Truncation** | Preserves top 10 lines + bottom 15 lines for unparsed stream fallbacks | **90% – 95%** |
+| **Ultra-Compact Mode** | Strips ASCII borders and padding (`ultra_compact = true`) | **15% – 20% extra** |
+
+---
 
 ## JSON Formats by Agent
 
-### Claude Code (Shell Hook)
-
+### 1. Claude Code (Shell Hook)
 **Input** (stdin):
-
 ```json
 {
   "tool_name": "Bash",
   "tool_input": { "command": "git status" }
 }
 ```
-
-**Output** (stdout, when rewritten):
-
+**Output**:
 ```json
 {
   "hookSpecificOutput": {
@@ -87,67 +102,15 @@ Each agent subdirectory has its own README with hook-specific details:
 }
 ```
 
-### Cursor (Shell Hook)
-
-**Input**: Same as Claude Code.
-
-**Output** (stdout, when rewritten):
-
-```json
-{
-  "permission": "allow",
-  "updated_input": { "command": "rtk git status" }
-}
-```
-
-Returns `{}` when no rewrite (Cursor requires JSON for all paths).
-
-### Copilot CLI (Rust Binary)
-
-**Input** (stdin, camelCase, `toolArgs` is JSON-stringified):
-
-```json
-{
-  "toolName": "bash",
-  "toolArgs": "{\"command\": \"git status\"}"
-}
-```
-
-**Output** (no `updatedInput` support -- uses deny-with-suggestion):
-
-```json
-{
-  "permissionDecision": "deny",
-  "permissionDecisionReason": "Token savings: use `rtk git status` instead"
-}
-```
-
-### VS Code Copilot Chat (Rust Binary)
-
-**Input** (stdin, snake_case):
-
-```json
-{
-  "tool_name": "Bash",
-  "tool_input": { "command": "git status" }
-}
-```
-
-**Output**: Same as Claude Code format (with `updatedInput`).
-
-### Gemini CLI (Rust Binary)
-
+### 2. Gemini CLI (Rust Binary)
 **Input** (stdin):
-
 ```json
 {
   "tool_name": "run_shell_command",
   "tool_input": { "command": "git status" }
 }
 ```
-
-**Output** (when rewritten):
-
+**Output**:
 ```json
 {
   "decision": "allow",
@@ -157,131 +120,36 @@ Returns `{}` when no rewrite (Cursor requires JSON for all paths).
 }
 ```
 
-**No rewrite**: `{"decision": "allow"}`
-
-### Mistral Vibe (Rust Binary)
-
-**Input** (stdin):
-
+### 3. Cursor (Shell Hook / Binary)
+**Output**:
 ```json
 {
-  "tool_name": "bash",
-  "tool_input": { "command": "git status" },
-  "hook_event_name": "pre_tool",
-  "session_id": "..."
+  "permission": "allow",
+  "updated_input": { "command": "rtk git status" }
 }
 ```
 
-**Output** (when rewritten):
+---
 
-```json
-{
-  "hook_specific_output": {
-    "tool_input": { "command": "rtk git status" }
-  },
-  "system_message": "rtk: rewrote to `rtk git status`"
-}
+## Exit Code Contract & Graceful Degradation
+
+Hooks are **non-blocking**: an error in RTK or an unparsed JSON input must **never** prevent a user command from running:
+
+- Missing binary or hook script $\rightarrow$ Exit 0 (command runs raw).
+- Invalid JSON input $\rightarrow$ Pass through unchanged, exit 0.
+- `rtk rewrite` subprocess error $\rightarrow$ Exit 0.
+- Filter logic fallback $\rightarrow$ Return raw output.
+
+---
+
+## Installation & Verification Commands
+
+```bash
+rtk init -g                  # Global hook for Claude Code
+rtk init -g --gemini         # Global hook for Gemini CLI
+rtk init --agent antigravity # Rules & prompt hook for Google Antigravity
+rtk init --agent pi          # Extension hook for Pi Agent
+rtk init --codex             # Rules hook for OpenAI Codex CLI
+rtk init --show              # Display active agent hook status
+rtk init -g --uninstall     # Clean uninstall of RTK artifacts
 ```
-
-**No rewrite**: exit 0 with empty stdout (Vibe's contract for "no opinion" from a `pre_tool` hook).
-
-### OpenCode (TypeScript Plugin)
-
-Mutates `args.command` in-place via the zx library:
-
-```typescript
-const result = await $`rtk rewrite ${command}`.quiet().nothrow()
-const rewritten = String(result.stdout).trim()
-if (rewritten && rewritten !== command) {
-  (args as Record<string, unknown>).command = rewritten
-}
-```
-
-### Hermes (Python Plugin)
-
-Mutates `args["command"]` in-place via the `pre_tool_call` hook:
-
-```python
-result = subprocess.run(["rtk", "rewrite", command], capture_output=True, text=True, timeout=2)
-rewritten = result.stdout.strip()
-if result.returncode in {0, 3} and rewritten and rewritten != command:
-    args["command"] = rewritten
-```
-
-## Command Rewrite Registry
-
-The registry (`src/discover/registry.rs`) handles command patterns across these categories:
-
-| Category | Examples | Savings |
-|----------|----------|---------|
-| Test Runners | vitest, pytest, cargo test, go test, playwright | 90-99% |
-| Build Tools | cargo build, npm, pnpm, dotnet, make | 70-90% |
-| VCS | git status/log/diff/show | 70-80% |
-| Language Servers | tsc, mypy | 80-83% |
-| Linters | eslint, ruff, golangci-lint, biome | 80-85% |
-| Package Managers | pip, cargo install, pnpm list | 75-80% |
-| File Operations | ls, find, grep, cat, head, tail | 60-75% |
-| Infrastructure | docker, kubectl, aws, terraform | 75-85% |
-
-### Compound Command Handling
-
-The registry handles `&&`, `||`, `;`, `|`, `|&`, and `&` operators:
-
-- **Pipe** (`|`): Producers and intermediate stages stay raw; only a pipeline-safe final stage is rewritten
-- **Stderr pipe** (`|&`): The complete pipeline stays raw
-- **And/Or/Semicolon** (`&&`, `||`, `;`): Both sides rewritten independently
-- **Pipeline-safe rules**: Initially limited to argument-safe `grep`, `rg`, and `wc` invocations; search pattern-file forms defer
-
-Example: `cargo fmt --all && cargo test` becomes `rtk cargo fmt --all && rtk cargo test`
-
-### Override Controls
-
-- **`RTK_DISABLED=1`**: Per-command override (`RTK_DISABLED=1 git status` runs raw)
-- **`exclude_commands`**: In `~/.config/rtk/config.toml`, list commands to never rewrite. Matches against the full command after stripping env prefixes. Subcommand patterns work (`"git push"` excludes `git push origin main`). Patterns starting with `^` are treated as regex.
-- **Already-RTK**: `rtk git status` passes through unchanged (no `rtk rtk git`)
-
-## Exit Code Contract
-
-Hooks must **never block command execution**. All error paths (missing binary, bad JSON, rewrite failure) must exit 0 so the agent's command runs unmodified. A hook that exits non-zero prevents the user's command from executing.
-
-When there is no rewrite to apply, the hook must produce no output (or `{}` for Cursor, which requires JSON on all paths).
-
-### Gaps (to be fixed)
-
-- `hook_cmd.rs::run_gemini()` — exits 1 on invalid JSON input instead of exit 0
-
-## Graceful Degradation
-
-Hooks are **non-blocking** -- they never prevent a command from executing:
-
-- jq not installed: warning to stderr, exit 0 (command runs raw)
-- rtk binary not found: warning to stderr, exit 0
-- rtk version too old (< 0.23.0): warning to stderr, exit 0
-- Invalid JSON input: pass through unchanged
-- `rtk rewrite` crashes: hook exits 0 (subprocess error ignored)
-- Filter logic error: fallback to raw command output
-
-## Adding a New Agent Integration
-
-New integrations must follow the [Exit Code Contract](#exit-code-contract) and [Graceful Degradation](#graceful-degradation) above, as well as the project's [Design Philosophy](../CONTRIBUTING.md#design-philosophy).
-
-### Integration Tiers
-
-| Tier | Mechanism | Maintenance | Examples |
-|------|-----------|-------------|----------|
-| **Full hook** | Shell script or Rust binary, intercepts commands via agent's hook API | High — must track agent API changes | Claude Code, Cursor, Copilot, Gemini |
-| **Plugin** | TypeScript/JS/Python plugin in agent's plugin system | Medium — agent manages loading | OpenCode, Hermes, Pi |
-| **Rules file** | Prompt-level instructions the agent reads | Low — no code to break | Cline, Windsurf, Codex |
-
-### Eligibility
-
-RTK supports AI coding assistants that developers actually use day-to-day. To add a new agent:
-
-- Agent has a **documented, stable hook/plugin API** (not experimental/alpha)
-- Agent is **actively maintained** (commit activity in last 3 months)
-- Integration follows the **exit code contract** (exit 0 on all error paths)
-- Hook output matches the **agent's expected JSON format** exactly
-
-### Maintenance
-
-If an agent's API changes and the hook breaks, the integration should be updated promptly. If the agent becomes unmaintained or the hook can't be fixed, the integration may be deprecated with a release note.
