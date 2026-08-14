@@ -33,6 +33,7 @@ const PI_PLUGIN: &str = include_str!("../../hooks/pi/rtk.ts");
 // Embedded slim RTK awareness instructions
 const RTK_SLIM: &str = include_str!("../../hooks/claude/rtk-awareness.md");
 const RTK_SLIM_CODEX: &str = include_str!("../../hooks/codex/rtk-awareness.md");
+const RTK_SLIM_GEMINI: &str = include_str!("../../hooks/gemini/rtk-awareness.md");
 
 /// Template written by `rtk init` when no filters.toml exists yet.
 const FILTERS_TEMPLATE: &str = r#"# Project-local RTK filters — commit this file with your repo.
@@ -4169,8 +4170,8 @@ pub fn run_gemini(
     // 2. Install GEMINI.md (RTK awareness for Gemini)
     if !hook_only {
         let gemini_md_path = gemini_dir.join(GEMINI_MD);
-        // Reuse the same slim RTK awareness content
-        write_if_changed(&gemini_md_path, RTK_SLIM, GEMINI_MD, ctx)?;
+        // Dedicated slim RTK awareness content for Gemini CLI & Antigravity
+        write_if_changed(&gemini_md_path, RTK_SLIM_GEMINI, GEMINI_MD, ctx)?;
     }
 
     // 3. Patch ~/.gemini/settings.json
