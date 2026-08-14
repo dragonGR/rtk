@@ -28,10 +28,24 @@ fn sanitize_key(key: &str) -> String {
     out
 }
 
+fn cwd_dir_name() -> String {
+    if let Ok(cwd) = std::env::current_dir() {
+        let path_str = cwd.to_string_lossy();
+        let mut hash: u64 = 5381;
+        for byte in path_str.bytes() {
+            hash = ((hash << 5).wrapping_add(hash)).wrapping_add(byte as u64);
+        }
+        format!("{:x}", hash)
+    } else {
+        "global".to_string()
+    }
+}
+
 fn snapshot_path(command_key: &str) -> Option<PathBuf> {
     let base = dirs::data_local_dir()?;
+    let dir_hash = cwd_dir_name();
     let key = sanitize_key(command_key);
-    Some(base.join("rtk").join("delta").join(format!("{}.txt", key)))
+    Some(base.join("rtk").join("delta").join(dir_hash).join(format!("{}.txt", key)))
 }
 
 fn load_snapshot(command_key: &str) -> Option<String> {

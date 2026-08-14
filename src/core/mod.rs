@@ -1,6 +1,7 @@
 //! Building blocks shared across all RTK modules.
 
 pub mod args_utils;
+pub mod ast;
 pub mod config;
 pub mod constants;
 pub mod delta;
@@ -8,6 +9,7 @@ pub mod delta;
 pub mod display_helpers;
 pub mod filter;
 pub mod guard;
+pub mod json_trim;
 pub mod runner;
 pub mod stream;
 pub mod tee;
