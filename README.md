@@ -99,14 +99,16 @@ Download from [releases](https://github.com/rtk-ai/rtk/releases):
 
 > **Windows users**: Extract the zip and place `rtk.exe` somewhere in your PATH (e.g. `C:\Users\<you>\.local\bin`). Run RTK from **Command Prompt**, **PowerShell**, or **Windows Terminal** — do not double-click the `.exe` (it will flash and close). The full hook system works natively on Windows (and in [WSL](https://learn.microsoft.com/en-us/windows/wsl/install)). See [Windows setup](#windows) below for details.
 
-### Verify Installation
+### Verify Installation & Pre-Install Sanity Check
 
 ```bash
-rtk --version   # Should show "rtk 0.28.2"
+which rtk       # Verify correct binary path
+rtk --version   # Should show rtk X.Y.Z
 rtk gain        # Should show the savings dashboard
 ```
 
-> **Name collision warning**: Another project named "rtk" (Rust Type Kit) exists on crates.io. If `rtk gain` fails, you have the wrong package. Use `cargo install --git` above instead.
+> ⚠️ **Name collision warning**: Another tool named `rtk` (Rust Type Kit by `reachingforthejack`) exists on crates.io. If `rtk gain` fails with an unknown command error or `rtk --version` shows an unrelated binary, you have the wrong package installed. Ensure `~/.local/bin` or Homebrew is prioritized in your `$PATH`, or use `cargo install --git https://github.com/rtk-ai/rtk` as shown above.
+
 
 ## Quick Start
 
