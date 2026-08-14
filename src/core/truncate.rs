@@ -20,9 +20,52 @@ pub const fn reduced(cap: usize, by: usize) -> usize {
     }
 }
 
+/// Count total line breaks in text using SIMD-accelerated memchr.
+pub fn count_lines_simd(text: &str) -> usize {
+    if text.is_empty() {
+        return 0;
+    }
+    let mut count = memchr::memchr_iter(b'\n', text.as_bytes()).count();
+    if !text.ends_with('\n') {
+        count += 1;
+    }
+    count
+}
+
+/// Slice text to at most `max_lines` using SIMD-accelerated memchr without string allocations.
+#[allow(dead_code)]
+pub fn truncate_lines_simd(text: &str, max_lines: usize) -> &str {
+
+    if max_lines == 0 || text.is_empty() {
+        return "";
+    }
+    let mut iter = memchr::memchr_iter(b'\n', text.as_bytes());
+    if let Some(nth_offset) = iter.nth(max_lines - 1) {
+        &text[..=nth_offset]
+    } else {
+        text
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_count_lines_simd() {
+        assert_eq!(count_lines_simd(""), 0);
+        assert_eq!(count_lines_simd("hello"), 1);
+        assert_eq!(count_lines_simd("hello\nworld\n"), 2);
+        assert_eq!(count_lines_simd("line1\nline2\nline3"), 3);
+    }
+
+    #[test]
+    fn test_truncate_lines_simd() {
+        let input = "line1\nline2\nline3\nline4\n";
+        assert_eq!(truncate_lines_simd(input, 2), "line1\nline2\n");
+        assert_eq!(truncate_lines_simd(input, 10), input);
+    }
+
 
     #[test]
     fn reduced_preserves_current_values() {

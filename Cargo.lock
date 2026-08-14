@@ -897,6 +897,7 @@ dependencies = [
  "getrandom 0.4.2",
  "ignore",
  "libc",
+ "memchr",
  "quick-xml",
  "regex",
  "rusqlite",

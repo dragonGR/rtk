@@ -362,13 +362,15 @@ pub fn get_filter(level: FilterLevel) -> Box<dyn FilterStrategy> {
 }
 
 pub fn smart_truncate(content: &str, max_lines: usize, _lang: &Language) -> String {
-    let lines: Vec<&str> = content.lines().collect();
-    if lines.len() <= max_lines {
+    let total_lines = crate::core::truncate::count_lines_simd(content);
+    if total_lines <= max_lines {
         return content.to_string();
     }
 
+    let lines: Vec<&str> = content.lines().collect();
     let mut result = Vec::with_capacity(max_lines + 1);
     let mut kept_lines = 0;
+
 
     for line in &lines {
         let trimmed = line.trim();
