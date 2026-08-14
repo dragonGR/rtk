@@ -6,14 +6,14 @@
 //! - Command execution with error context
 
 use anyhow::{Context, Result};
-use regex::Regex;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::{LazyLock, Mutex, OnceLock};
+use std::sync::{Mutex, OnceLock};
+
 
 pub const TEXT_CAPTURE_MAX_BYTES: usize = 16 * 1024 * 1024;
 
