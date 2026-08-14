@@ -63,4 +63,29 @@ fn main() {
     }
 
     fs::write(&dest, combined).expect("Failed to write combined builtin_filters.toml");
+
+    // Dynamic fork version string with -dragonGR suffix
+    let pkg_version = std::env::var("CARGO_PKG_VERSION").unwrap_or_else(|_| "0.45.0".to_string());
+
+    let git_hash = std::process::Command::new("git")
+        .args(["rev-parse", "--short", "HEAD"])
+        .output()
+        .ok()
+        .and_then(|out| {
+            if out.status.success() {
+                String::from_utf8(out.stdout).ok().map(|s| s.trim().to_string())
+            } else {
+                None
+            }
+        });
+
+    let full_version = match git_hash {
+        Some(hash) if !hash.is_empty() => format!("{pkg_version}-dragonGR+g{hash}"),
+        _ => format!("{pkg_version}-dragonGR"),
+    };
+
+    println!("cargo:rustc-env=RTK_BUILD_VERSION={full_version}");
+    println!("cargo:rerun-if-changed=.git/HEAD");
+    println!("cargo:rerun-if-changed=.git/index");
+    println!("cargo:rerun-if-changed=Cargo.toml");
 }
