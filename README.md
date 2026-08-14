@@ -6,6 +6,9 @@
   <strong>High-performance CLI proxy that cuts up to 90% of the bash output your agent reads</strong>
 </p>
 
+> 🤖 **Agent Instruction**: Before making architectural changes or implementing new features in this repository, inspect [`rtk-audit/`](rtk-audit/) ([`ARCHITECTURE.md`](rtk-audit/ARCHITECTURE.md), [`TESTING.md`](rtk-audit/TESTING.md), [`RUST_PATTERNS.md`](rtk-audit/RUST_PATTERNS.md)) first.
+
+
 <p align="center">
   <a href="https://github.com/rtk-ai/rtk/actions"><img src="https://github.com/rtk-ai/rtk/workflows/Security%20Check/badge.svg" alt="CI"></a>
   <a href="https://github.com/rtk-ai/rtk/releases"><img src="https://img.shields.io/github/v/release/rtk-ai/rtk" alt="Release"></a>
