@@ -27,6 +27,13 @@
 > passthrough_max_chars = 2000
 > ```
 >
+> #### 🐚 PATH Setup Tip for Subshells & Agents
+> Ensure `~/.local/bin` is in your environment `PATH` so non-interactive subshells and AI agents can execute `rtk` everywhere:
+> ```bash
+> echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+> echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+> ```
+>
 > #### 🤖 AI Agent Setup Tip
 > If you are pair programming with an AI agent in this repository, instruct it to inspect [`rtk-audit/`](rtk-audit/) ([`ARCHITECTURE.md`](rtk-audit/ARCHITECTURE.md), [`TESTING.md`](rtk-audit/TESTING.md), [`RUST_PATTERNS.md`](rtk-audit/RUST_PATTERNS.md)) first.
 > *Pro Tip*: Copy the contents of `rtk-audit/` into your agent's global skills directory (e.g. `~/.gemini/config/skills/rtk-audit/` or `~/.agents/skills/rtk-audit/`). This allows any AI agent in any workspace to immediately understand the repository architecture and conventions without spending turn time scanning.
