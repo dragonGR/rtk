@@ -72,17 +72,25 @@ impl Drop for ChildGuard {
 /// for the target command and auto-routes it. Otherwise, streams raw output while
 /// tracking token consumption.
 pub fn run_proxy(args: &[OsString], opts: &ProxyOptions) -> Result<i32> {
-    if args.is_empty() {
+    let mut raw = opts.raw;
+    let effective_args = if !args.is_empty() && (args[0] == "-r" || args[0] == "--raw") {
+        raw = true;
+        &args[1..]
+    } else {
+        args
+    };
+
+    if effective_args.is_empty() {
         anyhow::bail!(
-            "proxy requires a command to execute\nUsage: rtk proxy [--raw] <command> [args...]"
+            "proxy requires a command to execute\nUsage: rtk proxy [-r|--raw] <command> [args...]"
         );
     }
 
     let timer = tracking::TimedExecution::start();
 
     // If a single quoted arg contains spaces, split it respecting quotes.
-    let (cmd_name, cmd_args): (String, Vec<String>) = if args.len() == 1 {
-        let full = args[0].to_string_lossy();
+    let (cmd_name, cmd_args): (String, Vec<String>) = if effective_args.len() == 1 {
+        let full = effective_args[0].to_string_lossy();
         let parts = shell_split(&full);
         if parts.len() > 1 {
             (parts[0].clone(), parts[1..].to_vec())
@@ -91,8 +99,8 @@ pub fn run_proxy(args: &[OsString], opts: &ProxyOptions) -> Result<i32> {
         }
     } else {
         (
-            args[0].to_string_lossy().into_owned(),
-            args[1..]
+            effective_args[0].to_string_lossy().into_owned(),
+            effective_args[1..]
                 .iter()
                 .map(|s| s.to_string_lossy().into_owned())
                 .collect(),
@@ -106,7 +114,7 @@ pub fn run_proxy(args: &[OsString], opts: &ProxyOptions) -> Result<i32> {
     };
 
     // Smart auto-routing: check if RTK has a registered filter rewrite for this command
-    if !opts.raw {
+    if !raw {
         if let Some(rewritten) = crate::discover::registry::rewrite_command(&full_cmd_str, &[], &[]) {
             if rewritten.starts_with("rtk ") && !rewritten.starts_with("rtk proxy") {
                 if opts.verbose > 0 {
