@@ -4,8 +4,10 @@ use super::constants::{CONFIG_TOML, DEFAULT_HISTORY_DAYS, RTK_DATA_DIR};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::sync::OnceLock;
 
 #[derive(Debug, Serialize, Deserialize, Default)]
+
 pub struct Config {
     #[serde(default)]
     pub tracking: TrackingConfig,
@@ -119,7 +121,7 @@ pub struct TelemetryConfig {
     pub consent_date: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LimitsConfig {
     /// Max total grep results to show (default: 200)
     pub grep_max_results: usize,
@@ -147,8 +149,12 @@ impl Default for LimitsConfig {
 
 /// Get limits config. Falls back to defaults if config can't be loaded.
 pub fn limits() -> LimitsConfig {
-    Config::load().map(|c| c.limits).unwrap_or_default()
+    static LIMITS_CACHE: OnceLock<LimitsConfig> = OnceLock::new();
+    LIMITS_CACHE
+        .get_or_init(|| Config::load().map(|c| c.limits).unwrap_or_default())
+        .clone()
 }
+
 
 impl Config {
     pub fn load() -> Result<Self> {

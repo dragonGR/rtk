@@ -186,6 +186,17 @@ pub fn tee_raw(raw: &str, command_slug: &str, exit_code: i32) -> Option<PathBuf>
     )
 }
 
+#[allow(dead_code)]
+pub fn append_hint(rendered: &str, raw: &str, command_slug: &str, exit_code: i32) -> String {
+
+    if let Some(hint) = tee_and_hint(raw, command_slug, exit_code) {
+        format!("{}\n{}", rendered.trim_end(), hint)
+    } else {
+        rendered.to_string()
+    }
+}
+
+
 fn display_path(path: &std::path::Path) -> String {
     if let Some(home) = dirs::home_dir() {
         if let Ok(relative) = path.strip_prefix(&home) {

@@ -8,11 +8,15 @@
 use anyhow::{Context, Result};
 use regex::Regex;
 use serde_json::Value;
-use std::fs;
-use std::path::PathBuf;
+use std::collections::HashMap;
+use std::fs::{self, File};
+use std::io::Read;
+use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::LazyLock;
-use std::sync::OnceLock;
+use std::sync::{LazyLock, Mutex, OnceLock};
+
+pub const TEXT_CAPTURE_MAX_BYTES: usize = 16 * 1024 * 1024;
+
 
 /// Truncates a string to `max_len` characters, appending `...` if needed.
 ///
@@ -453,12 +457,63 @@ fn read_composer_bin_dir(composer_json: &str) -> Option<PathBuf> {
     }
 }
 
+/// Read UTF-8 text from a file with a hard byte cap to avoid unbounded memory use.
+pub fn read_text_file_capped(path: &Path) -> Result<String> {
+    let mut file =
+        File::open(path).with_context(|| format!("Failed to read file: {}", path.display()))?;
+    read_text_from_reader_capped(&mut file, "file")
+}
+
+/// Read UTF-8 text from stdin with a hard byte cap to avoid unbounded memory use.
+pub fn read_text_stdin_capped() -> Result<String> {
+    let stdin = std::io::stdin();
+    let mut locked = stdin.lock();
+    read_text_from_reader_capped(&mut locked, "stdin")
+}
+
+fn read_text_from_reader_capped(reader: &mut impl Read, source: &str) -> Result<String> {
+    let mut bytes = Vec::new();
+    let mut limited = reader.take((TEXT_CAPTURE_MAX_BYTES + 1) as u64);
+    limited
+        .read_to_end(&mut bytes)
+        .with_context(|| format!("Failed to read from {}", source))?;
+
+    let truncated = bytes.len() > TEXT_CAPTURE_MAX_BYTES;
+    if truncated {
+        bytes.truncate(TEXT_CAPTURE_MAX_BYTES);
+    }
+
+    let mut text = String::from_utf8_lossy(&bytes).to_string();
+    if truncated {
+        text.push_str(&format!(
+            "\n[rtk] input truncated after {} bytes to cap memory usage",
+            TEXT_CAPTURE_MAX_BYTES
+        ));
+    }
+
+    Ok(text)
+}
+
 /// Check if a tool exists on PATH (PATHEXT-aware on Windows).
 ///
 /// Replaces manual `Command::new("which").arg(tool)` checks that fail on Windows.
 pub fn tool_exists(name: &str) -> bool {
-    which::which(name).is_ok()
+    static CACHE: OnceLock<Mutex<HashMap<String, bool>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+
+    if let Ok(guard) = cache.lock() {
+        if let Some(found) = guard.get(name) {
+            return *found;
+        }
+    }
+
+    let exists = which::which(name).is_ok();
+    if let Ok(mut guard) = cache.lock() {
+        guard.insert(name.to_string(), exists);
+    }
+    exists
 }
+
 
 /// Extract short name from AWS ARN.
 /// Example: `arn:aws:ecs:region:acct:service/cluster/name` -> `name`

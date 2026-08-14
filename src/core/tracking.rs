@@ -33,20 +33,28 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection};
 use serde::Serialize;
+use std::cell::RefCell;
 use std::ffi::OsString;
 use std::path::PathBuf;
-use std::time::Instant;
+use std::sync::OnceLock;
+use std::time::{Duration, Instant};
 
 // ── Project path helpers ── // added: project-scoped tracking support
 
 /// Get the canonical project path string for the current working directory.
 fn current_project_path_string() -> String {
-    std::env::current_dir()
-        .ok()
-        .and_then(|p| p.canonicalize().ok())
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_default()
+    static PROJECT_PATH_CACHE: OnceLock<String> = OnceLock::new();
+    PROJECT_PATH_CACHE
+        .get_or_init(|| {
+            std::env::current_dir()
+                .ok()
+                .and_then(|p| p.canonicalize().ok())
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default()
+        })
+        .clone()
 }
+
 
 /// Build SQL filter params for project-scoped queries.
 /// Returns (exact_match, glob_prefix) for WHERE clause.
@@ -62,6 +70,19 @@ fn project_filter_params(project_path: Option<&str>) -> (Option<String>, Option<
 }
 
 use super::constants::{DEFAULT_HISTORY_DAYS, HISTORY_DB, RTK_DATA_DIR};
+
+enum TrackerInstance {
+    Enabled(Tracker),
+    Disabled,
+}
+
+thread_local! {
+    static TRACKER_INSTANCE: RefCell<Option<TrackerInstance>> = const { RefCell::new(None) };
+    static LAST_CLEANUP: RefCell<Option<Instant>> = const { RefCell::new(None) };
+}
+
+const CLEANUP_INTERVAL: Duration = Duration::from_secs(60 * 60);
+
 
 /// Main tracking interface for recording and querying command history.
 ///
@@ -447,8 +468,24 @@ impl Tracker {
             ],
         )?;
 
-        self.cleanup_old()?;
+        self.maybe_cleanup_old()?;
         Ok(())
+    }
+
+    fn maybe_cleanup_old(&self) -> Result<()> {
+        LAST_CLEANUP.with(|last_cleanup| {
+            let now = Instant::now();
+            let should_cleanup = last_cleanup
+                .borrow()
+                .map_or(true, |last| now.duration_since(last) >= CLEANUP_INTERVAL);
+
+            if should_cleanup {
+                self.cleanup_old()?;
+                *last_cleanup.borrow_mut() = Some(now);
+            }
+
+            Ok(())
+        })
     }
 
     fn cleanup_old(&self) -> Result<()> {
@@ -494,9 +531,10 @@ impl Tracker {
                 fallback_succeeded as i32,
             ],
         )?;
-        self.cleanup_old()?;
+        self.maybe_cleanup_old()?;
         Ok(())
     }
+
 
     /// Get parse failure summary for `rtk gain --failures`.
     pub fn get_parse_failure_summary(&self) -> Result<ParseFailureSummary> {
@@ -1290,12 +1328,32 @@ pub struct ParseFailureSummary {
     pub recent: Vec<ParseFailureRecord>,
 }
 
+fn with_tracker<T>(f: impl FnOnce(&Tracker) -> Result<T>) -> Result<T> {
+    TRACKER_INSTANCE.with(|cell| {
+        if cell.borrow().is_none() {
+            let instance = match Tracker::new() {
+                Ok(tracker) => TrackerInstance::Enabled(tracker),
+                Err(_) => TrackerInstance::Disabled,
+            };
+            *cell.borrow_mut() = Some(instance);
+        }
+
+        let guard = cell.borrow();
+        match guard.as_ref() {
+            Some(TrackerInstance::Enabled(tracker)) => f(tracker),
+            Some(TrackerInstance::Disabled) => Err(anyhow::anyhow!("tracker disabled")),
+            None => anyhow::bail!("tracker unavailable"),
+        }
+    })
+}
+
 /// Record a parse failure without ever crashing.
 /// Silently ignores all errors — used in the fallback path.
 pub fn record_parse_failure_silent(raw_command: &str, error_message: &str, succeeded: bool) {
-    if let Ok(tracker) = Tracker::new() {
-        let _ = tracker.record_parse_failure(raw_command, error_message, succeeded);
-    }
+    let _ = with_tracker(|tracker| {
+        tracker.record_parse_failure(raw_command, error_message, succeeded)?;
+        Ok(())
+    });
 }
 
 /// Estimate token count from text using ~4 chars = 1 token heuristic.
@@ -1394,15 +1452,16 @@ impl TimedExecution {
         let input_tokens = estimate_tokens(input);
         let output_tokens = estimate_tokens(output);
 
-        if let Ok(tracker) = Tracker::new() {
-            let _ = tracker.record(
+        let _ = with_tracker(|tracker| {
+            tracker.record(
                 original_cmd,
                 rtk_cmd,
                 input_tokens,
                 output_tokens,
                 elapsed_ms,
-            );
-        }
+            )?;
+            Ok(())
+        });
     }
 
     /// Track passthrough commands (timing-only, no token counting).
@@ -1428,11 +1487,13 @@ impl TimedExecution {
     pub fn track_passthrough(&self, original_cmd: &str, rtk_cmd: &str) {
         let elapsed_ms = self.start.elapsed().as_millis() as u64;
         // input_tokens=0, output_tokens=0 won't dilute savings statistics
-        if let Ok(tracker) = Tracker::new() {
-            let _ = tracker.record(original_cmd, rtk_cmd, 0, 0, elapsed_ms);
-        }
+        let _ = with_tracker(|tracker| {
+            tracker.record(original_cmd, rtk_cmd, 0, 0, elapsed_ms)?;
+            Ok(())
+        });
     }
 }
+
 
 /// Format OsString args for tracking display.
 ///
