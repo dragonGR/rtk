@@ -28,9 +28,13 @@ fn read_lines_lossy(reader: impl Read) -> impl Iterator<Item = String> {
         if buf.last() == Some(&b'\r') {
             buf.pop();
         }
-        Some(String::from_utf8_lossy(&buf).into_owned())
+        match String::from_utf8(buf) {
+            Ok(s) => Some(s),
+            Err(e) => Some(String::from_utf8_lossy(e.as_bytes()).into_owned()),
+        }
     })
 }
+
 
 pub trait StreamFilter {
     fn feed_line(&mut self, line: &str) -> Option<String>;
