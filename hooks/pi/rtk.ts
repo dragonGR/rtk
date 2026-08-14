@@ -10,8 +10,21 @@
 //   1           No RTK equivalent → pass through unchanged
 //   3 + stdout  Rewrite (advisory) → mutate command
 
+// @ts-ignore
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent"
+// @ts-ignore
 import { isToolCallEventType } from "@earendil-works/pi-coding-agent"
+
+declare const process: { env: Record<string, string | undefined> }
+
+interface ToolCallEvent {
+  input?: { command?: string }
+  [key: string]: any
+}
+
+interface ToolCallContext {
+  signal?: AbortSignal
+}
 
 const REWRITE_TIMEOUT_MS = 2_000
 const MIN_SUPPORTED_RTK_MINOR = 23
@@ -95,19 +108,20 @@ export default async function (pi: ExtensionAPI) {
     }
   }
 
-  pi.on("tool_call", async (event, ctx) => {
+  pi.on("tool_call", async (event: ToolCallEvent, ctx: ToolCallContext) => {
     try {
-      if (process.env.RTK_DISABLED === "1") return
+      if (typeof process !== "undefined" && process.env?.RTK_DISABLED === "1") return
       if (!isToolCallEventType("bash", event)) return
 
-      const cmd = event.input.command
+      const cmd = event.input?.command
       if (typeof cmd !== "string" || isNonRoutable(cmd)) return
-
 
       // Delegate to RTK.
       const rewritten = await rewriteCommand(pi, cmd, ctx.signal)
       if (rewritten && rewritten !== cmd) {
-        event.input.command = rewritten
+        if (event.input) {
+          event.input.command = rewritten
+        }
       }
     } catch (err) {
       // Fail open: never block execution on an unexpected error.
@@ -116,6 +130,7 @@ export default async function (pi: ExtensionAPI) {
     }
   })
 }
+
 
 // Parse "X.Y.Z" semver, return [major, minor, patch] or null.
 function parseSemver(raw: string): [number, number, number] | null {
