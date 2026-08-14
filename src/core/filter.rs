@@ -241,6 +241,20 @@ impl FilterStrategy for AggressiveFilter {
             return MinimalFilter.filter(content, lang);
         }
 
+        let ext = match lang {
+            Language::Rust => Some("rs"),
+            Language::TypeScript => Some("ts"),
+            Language::JavaScript => Some("js"),
+            Language::Python => Some("py"),
+            Language::Go => Some("go"),
+            _ => None,
+        };
+
+        if let Some(file_ext) = ext {
+            let minimal = MinimalFilter.filter(content, lang);
+            return crate::core::ast::skeletonize(&minimal, file_ext);
+        }
+
         let minimal = MinimalFilter.filter(content, lang);
         let mut result = String::with_capacity(minimal.len() / 2);
         let mut brace_depth = 0;

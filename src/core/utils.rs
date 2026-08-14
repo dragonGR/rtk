@@ -44,7 +44,6 @@ pub fn truncate(s: &str, max_len: usize) -> String {
 
 /// Prune vendor and internal framework stack frames from error stack traces.
 /// Keeps workspace-local stack frames while collapsing repetitive framework frames.
-#[allow(dead_code)]
 pub fn prune_framework_stack_trace(trace: &str) -> String {
     if trace.is_empty() {
         return String::new();
@@ -387,12 +386,7 @@ pub fn count_tokens(text: &str) -> usize {
 /// Returns "pnpm", "yarn", or "npm" based on lockfile presence.
 ///
 /// # Examples
-/// ```no_run
-/// use rtk::utils::detect_package_manager;
-/// let pm = detect_package_manager();
-/// // Returns "pnpm" if pnpm-lock.yaml exists, "yarn" if yarn.lock, else "npm"
-/// ```
-#[allow(dead_code)]
+/// Build a Command using the detected package manager's exec mechanism.
 pub fn detect_package_manager() -> &'static str {
     if std::path::Path::new("pnpm-lock.yaml").exists() {
         "pnpm"

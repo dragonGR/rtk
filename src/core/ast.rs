@@ -3,8 +3,6 @@
 //! Replaces function and method implementations with lightweight placeholders `{ /* ... */ }`
 //! while preserving imports, type definitions, structs, interfaces, enums, and signatures.
 
-#![allow(dead_code)]
-
 /// Skeletonizes source code according to the file extension.
 /// Supports `.rs`, `.ts`, `.tsx`, `.js`, `.jsx`, `.py`, and `.go`.
 pub fn skeletonize(code: &str, file_ext: &str) -> String {

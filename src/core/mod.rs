@@ -4,17 +4,14 @@ pub mod args_utils;
 pub mod ast;
 pub mod config;
 pub mod constants;
-pub mod delta;
-
 pub mod display_helpers;
 pub mod filter;
 pub mod guard;
-pub mod json_trim;
+pub mod proxy;
 pub mod runner;
 pub mod stream;
 pub mod tee;
 pub mod toml_filter;
-
 pub mod tracking;
 pub mod truncate;
 pub mod utils;
