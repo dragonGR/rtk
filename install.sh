@@ -59,6 +59,7 @@ install_local() {
 
     info "Installing $BINARY_NAME to $INSTALL_DIR..."
     mkdir -p "$INSTALL_DIR"
+    rm -f "${INSTALL_DIR}/${BINARY_NAME}"
     cp "$TARGET_BIN" "${INSTALL_DIR}/${BINARY_NAME}"
     chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
 }

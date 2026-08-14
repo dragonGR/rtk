@@ -410,6 +410,11 @@ fn atomic_write(path: &Path, content: &str) -> Result<()> {
         )
     })?;
 
+    // Ensure parent directory exists before creating temp file
+    fs::create_dir_all(parent).with_context(|| {
+        format!("Failed to create parent directory {}", parent.display())
+    })?;
+
     // Create temp file in same directory (ensures same filesystem for atomic rename)
     let mut temp_file = NamedTempFile::new_in(parent)
         .with_context(|| format!("Failed to create temp file in {}", parent.display()))?;
@@ -1110,7 +1115,9 @@ fn run_default_mode(
         if let Some(path) = &opencode_plugin_path {
             println!("  OpenCode:  {}", path.display());
         }
-        println!("  CLAUDE.md: @RTK.md reference added");
+        if claude_md_path.exists() {
+            println!("  CLAUDE.md: @RTK.md reference added");
+        }
 
         if migrated {
             println!("\n  [ok] Migrated: removed 137-line RTK block from CLAUDE.md");
@@ -2512,11 +2519,10 @@ fn write_rtk_block(
 /// Patch CLAUDE.md: add @RTK.md, migrate if old block exists
 fn patch_claude_md(path: &Path, ctx: InitContext) -> Result<bool> {
     let InitContext { verbose, dry_run } = ctx;
-    let mut content = if path.exists() {
-        fs::read_to_string(path)?
-    } else {
-        String::new()
-    };
+    if !path.exists() {
+        return Ok(false);
+    }
+    let mut content = fs::read_to_string(path)?;
 
     let mut migrated = false;
 
@@ -7130,8 +7136,8 @@ mod tests {
 
             assert!(claude_dir.join(RTK_MD).exists(), "RTK.md must be created");
             assert!(
-                claude_dir.join(CLAUDE_MD).exists(),
-                "CLAUDE.md must be created"
+                !claude_dir.join(CLAUDE_MD).exists(),
+                "CLAUDE.md should not be created if not present"
             );
 
             let settings = claude_dir.join(SETTINGS_JSON);
