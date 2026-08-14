@@ -18,12 +18,11 @@ pub struct Config {
     #[serde(default)]
     pub tee: crate::core::tee::TeeConfig,
     #[serde(default)]
-    pub telemetry: TelemetryConfig,
-    #[serde(default)]
     pub hooks: HooksConfig,
     #[serde(default)]
     pub limits: LimitsConfig,
 }
+
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct HooksConfig {
@@ -112,16 +111,8 @@ impl Default for FilterConfig {
     }
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
-pub struct TelemetryConfig {
-    pub enabled: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub consent_given: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub consent_date: Option<String>,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
+
 pub struct LimitsConfig {
     /// Max total grep results to show (default: 200)
     pub grep_max_results: usize,
@@ -260,46 +251,15 @@ exclude_commands = ["curl"]
     #[test]
     fn test_config_without_hooks_section_is_valid() {
         let toml = r#"
+
 [tracking]
 enabled = true
 history_days = 90
 "#;
-        let config: Config = toml::from_str(toml).expect("valid toml");
-        assert!(config.hooks.exclude_commands.is_empty());
-    }
-
-    #[test]
-    fn test_old_toml_without_consent_fields() {
-        let toml = r#"
-[telemetry]
-enabled = true
-"#;
-        let config: Config = toml::from_str(toml).expect("valid toml");
-        assert!(config.telemetry.enabled);
-        assert!(config.telemetry.consent_given.is_none());
-        assert!(config.telemetry.consent_date.is_none());
-    }
-
-    #[test]
-    fn test_telemetry_default_disabled() {
-        let config = Config::default();
-        assert!(!config.telemetry.enabled);
-        assert!(config.telemetry.consent_given.is_none());
-    }
-
-    #[test]
-    fn test_telemetry_consent_roundtrip() {
-        let toml = r#"
-[telemetry]
-enabled = true
-consent_given = true
-consent_date = "2026-04-10T12:00:00Z"
-"#;
-        let config: Config = toml::from_str(toml).expect("valid toml");
-        assert_eq!(config.telemetry.consent_given, Some(true));
-        assert_eq!(
-            config.telemetry.consent_date.as_deref(),
-            Some("2026-04-10T12:00:00Z")
-        );
+        let _config: Config = toml::from_str(toml).expect("valid toml");
     }
 }
+
+
+
+

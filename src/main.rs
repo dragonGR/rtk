@@ -598,13 +598,8 @@ enum Commands {
     /// Show RTK adoption across Claude Code sessions
     Session {},
 
-    /// Manage telemetry consent and data (RGPD/GDPR)
-    Telemetry {
-        #[command(subcommand)]
-        command: core::telemetry_cmd::TelemetrySubcommand,
-    },
-
     /// Learn CLI corrections from Claude Code error history
+
     Learn {
         /// Filter by project path (substring match)
         #[arg(short, long)]
@@ -1580,10 +1575,8 @@ where
 }
 
 fn run_cli() -> Result<i32> {
-    // Fire-and-forget telemetry ping (1/day, non-blocking)
-    core::telemetry::maybe_ping();
-
     let cli = match Cli::try_parse_from(std::env::args_os()) {
+
         Ok(cli) => cli,
         Err(e) => {
             if matches!(e.kind(), ErrorKind::DisplayHelp | ErrorKind::DisplayVersion) {
@@ -2291,12 +2284,8 @@ fn run_cli() -> Result<i32> {
             0
         }
 
-        Commands::Telemetry { command } => {
-            core::telemetry_cmd::run(&command)?;
-            0
-        }
-
         Commands::Learn {
+
             project,
             all,
             since,
