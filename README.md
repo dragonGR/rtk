@@ -6,6 +6,20 @@
   <strong>High-performance CLI proxy that cuts up to 90% of the bash output your agent reads</strong>
 </p>
 
+> [!NOTE]
+> **Fork Notice by [dragonGR](https://github.com/dragonGR)**
+>
+> This repository is a personal fork of RTK maintained by **dragonGR**. With full respect and appreciation for the original developers of [rtk-ai/rtk](https://github.com/rtk-ai/rtk), this fork focuses on continuous optimization, streamlining unnecessary complexity, and maintaining a leaner, high-performance CLI proxy.
+>
+> **Contributions**: Pull requests are welcome! However, please ensure code is well-tested, production-grade, and clean — low-quality AI slop will be rejected.
+>
+> **Getting Started**: Build and install this fork locally right away by running:
+> ```bash
+> ./install.sh
+> # or
+> bash install.sh
+> ```
+
 > 🤖 **Agent Instruction**: Before making architectural changes or implementing new features in this repository, inspect [`rtk-audit/`](rtk-audit/) ([`ARCHITECTURE.md`](rtk-audit/ARCHITECTURE.md), [`TESTING.md`](rtk-audit/TESTING.md), [`RUST_PATTERNS.md`](rtk-audit/RUST_PATTERNS.md)) first.
 
 
