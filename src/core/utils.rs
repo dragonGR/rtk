@@ -54,11 +54,50 @@ pub fn truncate(s: &str, max_len: usize) -> String {
 /// assert_eq!(strip_ansi(colored), "Error");
 /// ```
 pub fn strip_ansi(text: &str) -> String {
-    static ANSI_RE: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"\x1b\[[0-9;]*[a-zA-Z]").unwrap());
+    if !text.as_bytes().contains(&0x1B) {
+        return text.to_string();
+    }
 
-    ANSI_RE.replace_all(text, "").to_string()
+    let bytes = text.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == 0x1B {
+            if i + 1 < bytes.len() && bytes[i + 1] == b'[' {
+                i += 2;
+                while i < bytes.len()
+                    && (bytes[i].is_ascii_digit()
+                        || bytes[i] == b';'
+                        || bytes[i] == b'?'
+                        || bytes[i] == b'!')
+                {
+                    i += 1;
+                }
+                if i < bytes.len()
+                    && (bytes[i].is_ascii_alphabetic()
+                        || matches!(bytes[i], b'@' | b'`' | b'~'))
+                {
+                    i += 1;
+                }
+                continue;
+            }
+            if i + 1 < bytes.len()
+                && matches!(
+                    bytes[i + 1],
+                    b'M' | b'7' | b'8' | b'D' | b'E' | b'H' | b'c'
+                )
+            {
+                i += 2;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+
+    String::from_utf8(out).unwrap_or_else(|_| text.to_string())
 }
+
 
 /// Executes a command and returns cleaned stdout/stderr.
 ///
