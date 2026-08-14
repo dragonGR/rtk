@@ -1181,10 +1181,11 @@ mod tests {
 
     #[test]
     fn test_prune_framework_stack_trace() {
-        let input = "  at main (src/index.ts:10)\n  at Module._compile (node:internal/modules/cjs/loader:1376)\n  at Module._load (node:internal/modules/cjs/loader:1023)\n  at end (src/index.ts:25)";
+        let input = "  at app (src/index.ts:10)\n  at Module._compile (node:internal/modules/cjs/loader:1376)\n  at Module._load (node:internal/modules/cjs/loader:1023)\n  at runner (node_modules/jest-runner/index.js:50)\n  at end (src/index.ts:50)";
         let output = prune_framework_stack_trace(input);
+        println!("\n=== BEFORE PRUNING ===\n{}\n\n=== AFTER PRUNING ===\n{}", input, output);
         assert!(output.contains("src/index.ts:10"));
         assert!(output.contains("internal framework frames hidden"));
-        assert!(output.contains("src/index.ts:25"));
+        assert!(output.contains("src/index.ts:50"));
     }
 }
