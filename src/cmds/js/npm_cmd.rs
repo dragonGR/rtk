@@ -132,8 +132,15 @@ fn run_filtered(name: &str, args: &[String], verbose: u8, skip_env: bool) -> Res
     )
 }
 
-/// Filter npm run output - strip boilerplate, progress bars, npm WARN
+/// Filter npm run output - extract file-grouped build errors when present, otherwise strip boilerplate
 fn filter_npm_output(output: &str) -> String {
+    // 1. If build/compiler errors are present, format a clean file-grouped summary
+    let errors = super::build_errors::extract_build_errors(output);
+    if !errors.is_empty() {
+        return super::build_errors::format_build_errors(&errors);
+    }
+
+    // 2. Otherwise fall back to line filtering
     let mut result = Vec::new();
 
     for line in output.lines() {
@@ -233,5 +240,23 @@ npm notice
         let output = "\n\n\n";
         let result = filter_npm_output(output);
         assert_eq!(result, "ok");
+    }
+
+    #[test]
+    fn test_filter_npm_build_errors() {
+        let output = r#"
+> project@1.0.0 build
+> next build
+
+Failed to compile.
+
+src/server/api/auth.ts(12,5): error TS2322: Type 'string' is not assignable to type 'number'.
+src/server/api/auth.ts(18,10): error TS2339: Property 'id' does not exist on type 'User'.
+src/components/Header.tsx(14,3): error TS2322: Type 'boolean' is not assignable to type 'string'.
+"#;
+        let result = filter_npm_output(output);
+        assert!(result.contains("Build Failed: 3 errors across 2 files"));
+        assert!(result.contains("src/server/api/auth.ts (2 errors):"));
+        assert!(result.contains("src/components/Header.tsx (1 errors):"));
     }
 }
