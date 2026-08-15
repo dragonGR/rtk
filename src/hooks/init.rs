@@ -17,7 +17,7 @@ use super::constants::{
     DROID_EXECUTE_MATCHER, DROID_HOME_ENV, DROID_HOOKS_FILE, DROID_HOOKS_SUBDIR,
     DROID_HOOK_COMMAND, DROID_SETTINGS_FILE, GEMINI_HOOK_FILE, HERMES_DIR, HERMES_PLUGINS_SUBDIR,
     HERMES_PLUGIN_INIT_FILE, HERMES_PLUGIN_MANIFEST_FILE, HERMES_PLUGIN_NAME, HOOKS_JSON,
-    HOOKS_SUBDIR, PI_CODING_AGENT_DIR_ENV, PI_DIR, PI_EXTENSIONS_SUBDIR, PI_LOCAL_DIR,
+    HOOKS_SUBDIR, OMP_DIR, PI_CODING_AGENT_DIR_ENV, PI_DIR, PI_EXTENSIONS_SUBDIR, PI_LOCAL_DIR,
     PI_PLUGIN_FILE, PRE_TOOL_USE_KEY, REWRITE_HOOK_FILE, SETTINGS_JSON, VIBE_BASH_MATCH, VIBE_DIR,
     VIBE_HOOKS_FILE, VIBE_HOOK_COMMAND, VIBE_HOOK_NAME, VIBE_PROMPTS_SUBDIR, VIBE_PROMPT_FILE,
 };
@@ -3302,11 +3302,16 @@ fn resolve_opencode_dir() -> Result<PathBuf> {
 
 // ─── Pi coding agent support ──────────────────────────────────────────
 
-/// Resolve Pi config directory, honouring `PI_CODING_AGENT_DIR` override.
+/// Resolve Pi / OMP config directory, honouring `PI_CODING_AGENT_DIR` override.
 fn resolve_pi_dir() -> Result<PathBuf> {
     if let Ok(dir) = std::env::var(PI_CODING_AGENT_DIR_ENV) {
         if !dir.is_empty() {
             return Ok(PathBuf::from(dir));
+        }
+    }
+    if let Ok(omp_dir) = resolve_home_subdir(OMP_DIR) {
+        if omp_dir.exists() {
+            return Ok(omp_dir);
         }
     }
     resolve_home_subdir(PI_DIR)
@@ -7472,6 +7477,27 @@ mod tests {
             let agents_md = pi_dir.join(AGENTS_MD);
             assert!(!agents_md.exists(), "AGENTS.md must not be created");
         });
+    }
+
+    #[test]
+    fn test_resolve_pi_dir_detects_omp() {
+        let _guard = PI_DIR_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let orig = std::env::var_os(PI_CODING_AGENT_DIR_ENV);
+        std::env::remove_var(PI_CODING_AGENT_DIR_ENV);
+
+        let resolved = resolve_pi_dir().unwrap();
+
+        if let Some(v) = orig {
+            std::env::set_var(PI_CODING_AGENT_DIR_ENV, v);
+        }
+
+        // Must resolve to either ~/.omp/agent or ~/.pi/agent
+        let path_str = resolved.to_string_lossy();
+        assert!(
+            path_str.contains(".omp") || path_str.contains(".pi"),
+            "resolved Pi dir must contain .omp or .pi, got: {}",
+            path_str
+        );
     }
 
     #[test]
